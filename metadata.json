@@ -1,0 +1,5 @@
+{
+  "name": "DocTab Splitter",
+  "description": "Upload a PDF export of your multi-tab Google Document. AI will intelligently separate the tabs and convert them into individual Markdown files for download.",
+  "requestFramePermissions": []
+}
