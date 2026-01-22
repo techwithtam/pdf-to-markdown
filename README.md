@@ -171,6 +171,20 @@ npm run build
 
 The output will be in the `dist/` directory.
 
+### Build Optimization
+
+The project uses manual chunk splitting to keep bundle sizes under 500 kB for optimal loading performance:
+
+| Chunk | Contents |
+|-------|----------|
+| `vendor-react` | React, React DOM |
+| `vendor-google` | Google Gemini SDK |
+| `vendor-docx` | Mammoth, JSZip |
+| `vendor-icons` | Lucide React icons |
+| `index` | Application code |
+
+This configuration is in `vite.config.ts` under `build.rollupOptions.output.manualChunks`. Splitting vendors improves caching since library code changes less frequently than application code.
+
 ## Deployment
 
 ### Vercel (Recommended)

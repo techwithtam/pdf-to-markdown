@@ -28,6 +28,9 @@ const App: React.FC = () => {
 
       if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         const htmlContent = await convertDocxToHtml(file);
+        if (!htmlContent || htmlContent.trim() === '') {
+          throw new Error("Failed to extract content from the DOCX file. The file may be corrupted or empty.");
+        }
         inputData = { type: 'html', data: htmlContent, mimeType: 'text/html' };
       } else {
         const base64Data = await fileToBase64(file);

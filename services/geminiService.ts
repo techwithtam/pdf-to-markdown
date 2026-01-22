@@ -99,11 +99,16 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
   });
 
   const text = response.text;
-  if (!text) {
-    throw new Error("No response from Gemini during tab detection");
+  if (!text || text.trim() === '') {
+    throw new Error("No response from Gemini during tab detection. The document may be too complex or contain unsupported content.");
   }
 
-  return JSON.parse(text) as DetectionResult;
+  try {
+    return JSON.parse(text) as DetectionResult;
+  } catch (parseError) {
+    console.error("Failed to parse tab detection response:", text.slice(0, 500));
+    throw new Error("Failed to parse document structure. The document format may not be supported or is too complex.");
+  }
 };
 
 /**
@@ -158,16 +163,21 @@ export const processTab = async (
   });
 
   const text = response.text;
-  if (!text) {
-    throw new Error(`No response from Gemini for tab: ${tab.fileName}`);
+  if (!text || text.trim() === '') {
+    throw new Error(`No response from Gemini for tab: ${tab.fileName}. The content may be too complex.`);
   }
 
-  const result = JSON.parse(text);
-  return {
-    fileName: tab.fileName,
-    originalTitle: tab.originalTitle,
-    markdownContent: result.markdownContent
-  };
+  try {
+    const result = JSON.parse(text);
+    return {
+      fileName: tab.fileName,
+      originalTitle: tab.originalTitle,
+      markdownContent: result.markdownContent
+    };
+  } catch (parseError) {
+    console.error(`Failed to parse response for tab ${tab.fileName}:`, text.slice(0, 500));
+    throw new Error(`Failed to process tab "${tab.originalTitle || tab.fileName}". The content may be too large or complex.`);
+  }
 };
 
 /**
