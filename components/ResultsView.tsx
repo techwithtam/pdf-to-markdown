@@ -1,7 +1,7 @@
 import React from 'react';
 import { ProcessedTab } from '../types';
-import { FileDown, FileText, Copy, Check, RotateCcw, Sparkles } from 'lucide-react';
-import { downloadFile, downloadAllAsZip } from '../utils/fileHelpers';
+import { FileDown, FileText, Copy, Check, RotateCcw, Sparkles, ChevronDown } from 'lucide-react';
+import { downloadFile, downloadAllAsZip, ExportFormat } from '../utils/fileHelpers';
 
 interface ResultsViewProps {
   tabs: ProcessedTab[];
@@ -10,6 +10,24 @@ interface ResultsViewProps {
 
 export const ResultsView: React.FC<ResultsViewProps> = ({ tabs, onReset }) => {
   const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
+  const [showDownloadMenu, setShowDownloadMenu] = React.useState(false);
+  const downloadMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDownloadAll = (format: ExportFormat) => {
+    downloadAllAsZip(tabs, format);
+    setShowDownloadMenu(false);
+  };
 
   const handleCopy = (content: string, index: number) => {
     navigator.clipboard.writeText(content);
@@ -40,13 +58,34 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ tabs, onReset }) => {
           <RotateCcw className="w-4 h-4" />
           Process another
         </button>
-        <button
-          onClick={() => downloadAllAsZip(tabs)}
-          className="flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 rounded-full hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50"
-        >
-          <FileDown className="w-4 h-4" />
-          Download all (.zip)
-        </button>
+        <div className="relative" ref={downloadMenuRef}>
+          <button
+            onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+            className="flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 rounded-full hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50"
+          >
+            <FileDown className="w-4 h-4" />
+            Download all (.zip)
+            <ChevronDown className={`w-4 h-4 transition-transform ${showDownloadMenu ? 'rotate-180' : ''}`} />
+          </button>
+          {showDownloadMenu && (
+            <div className="absolute top-full mt-2 right-0 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-10 min-w-[180px]">
+              <button
+                onClick={() => handleDownloadAll('md')}
+                className="w-full px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+              >
+                <FileText className="w-4 h-4 text-orange-500" />
+                Markdown (.md)
+              </button>
+              <button
+                onClick={() => handleDownloadAll('txt')}
+                className="w-full px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors border-t border-slate-100"
+              >
+                <FileText className="w-4 h-4 text-blue-500" />
+                Plain Text (.txt)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Results Grid */}

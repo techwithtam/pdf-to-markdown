@@ -54,10 +54,10 @@ pdf-to-markdown/
 │   └── VideoModal.tsx      # Demo video modal
 ├── services/
 │   └── geminiService.ts    # Document processing service
-│       ├── detectTabs()           # AI tab detection (PDFs)
-│       ├── detectTabsLocal()      # Local tab detection (DOCX)
+│       ├── detectTabs()           # AI tab detection (fallback for PDFs)
+│       ├── detectTabsLocal()      # Local tab detection via anchor tags
 │       ├── processTab()           # AI processing per tab
-│       ├── processTabsDirect()    # Direct HTML→MD conversion
+│       ├── processTabsDirect()    # Direct HTML→MD splitting with escape handling
 │       └── processDocumentChunked() # Main orchestrator
 ├── utils/
 │   └── fileHelpers.ts      # File conversion utilities
@@ -73,9 +73,10 @@ The app offers two processing modes to balance speed and accuracy:
 ### Quick Convert Mode (DOCX only)
 Best for clean DOCX files exported from Google Docs.
 
-1. **Local Tab Detection** - Parses HTML for separator patterns (no AI call)
+1. **Local Tab Detection** - Detects tabs via anchor tags from document bookmarks (no AI call)
 2. **Direct Conversion** - Uses Turndown to convert HTML to Markdown
 3. **Split by Boundaries** - Divides content at detected tab separators
+4. **AI Fallback** - If local detection finds ≤1 tab, automatically uses AI detection
 
 **Benefits**: Very fast (~2-5 seconds), no API usage for conversion
 
@@ -178,12 +179,24 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ### How Tab Detection Works
 
-The AI looks for "separator pages" - sparse pages with titles like:
-- `00-navigation-guide`
-- `01-foundation-collection`
-- `02-getting-started`
+**Quick Convert Mode (Local Detection)**
 
-Each separator marks the beginning of a new tab/section.
+For DOCX files, tab detection uses anchor tags from document bookmarks:
+- When you add bookmarks in Google Docs (Insert → Bookmark), they export as `<a id="..."></a>` anchors
+- The local detector finds paragraphs with anchors: `<p><a id="bookmark-id"></a>Tab Title</p>`
+- This is fast and reliable since bookmarks explicitly mark section boundaries
+- Supports any title format (plain text, numbers, special characters like `_navigation-guide`)
+
+**AI Enhanced Mode**
+
+For PDFs or when local detection finds ≤1 tab, AI detection is used:
+- Gemini analyzes the document structure
+- Looks for "separator pages" - sparse pages that mark section boundaries
+- Identifies tab titles regardless of formatting convention
+
+**Splitting**
+
+Once tabs are detected, the content is split at each separator. The converter handles special characters that may be escaped during HTML→Markdown conversion (e.g., underscores become `\_` in Markdown).
 
 ## Development
 

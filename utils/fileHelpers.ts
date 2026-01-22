@@ -42,17 +42,24 @@ export const downloadFile = (filename: string, content: string) => {
   document.body.removeChild(element);
 };
 
-export const downloadAllAsZip = async (tabs: { fileName: string; markdownContent: string }[]) => {
+export type ExportFormat = 'md' | 'txt';
+
+export const downloadAllAsZip = async (
+  tabs: { fileName: string; markdownContent: string }[],
+  format: ExportFormat = 'md'
+) => {
   const zip = new JSZip();
-  
+
   tabs.forEach((tab) => {
-    zip.file(tab.fileName, tab.markdownContent);
+    // Replace .md extension with the desired format
+    const fileName = tab.fileName.replace(/\.md$/, `.${format}`);
+    zip.file(fileName, tab.markdownContent);
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
   const element = document.createElement('a');
   element.href = URL.createObjectURL(content);
-  element.download = 'converted_tabs.zip';
+  element.download = `converted_tabs_${format}.zip`;
   document.body.appendChild(element);
   element.click();
   document.body.removeChild(element);
