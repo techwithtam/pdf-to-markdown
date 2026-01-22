@@ -1,7 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ProcessingResult } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 interface ProcessInput {
   type: 'pdf' | 'html';
@@ -70,6 +76,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
       };
     }
 
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview', // Switched to Flash for speed
       contents: contents,
