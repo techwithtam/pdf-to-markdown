@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
             manualChunks: {
               'vendor-react': ['react', 'react-dom'],
               'vendor-google': ['@google/genai'],
-              'vendor-docx': ['mammoth', 'jszip'],
+              'vendor-docx': ['mammoth', 'turndown', 'jszip'],
               'vendor-icons': ['lucide-react'],
             }
           }

@@ -11,6 +11,16 @@ Upload a PDF or DOCX file exported from Google Docs, and the app will:
 3. **Generate Markdown** - Outputs clean `.md` files with proper heading hierarchy
 4. **Download** - Get individual files or download all as a ZIP
 
+## Features
+
+- **Two Processing Modes**:
+  - **Quick Convert** - Fast local conversion using Turndown (best for DOCX)
+  - **AI Enhanced** - Full AI processing for maximum accuracy (best for PDFs)
+- **Google Doc Link Support** - Paste a Google Doc link to download as DOCX directly
+- **Cancel Processing** - Stop processing at any time and start over
+- **Real-time Progress** - See which tab is being processed with live updates
+- **Parallel Processing** - Multiple tabs processed simultaneously for speed
+
 ## Live Demo
 
 **[Watch the demo video](https://www.tella.tv/video/doc-greater-markdown-converter-enhv)**
@@ -23,6 +33,7 @@ Upload a PDF or DOCX file exported from Google Docs, and the app will:
 - **AI**: Google Gemini 2.5 Flash
 - **File Processing**:
   - Mammoth (DOCX to HTML conversion)
+  - Turndown (HTML to Markdown conversion for Quick Convert mode)
   - JSZip (ZIP file generation)
 - **Icons**: Lucide React
 - **Deployment**: Vercel
@@ -36,14 +47,17 @@ pdf-to-markdown/
 ├── types.ts                # TypeScript interfaces and enums
 ├── components/
 │   ├── Header.tsx          # Navigation header with logo
-│   ├── FileUpload.tsx      # Drag & drop file upload zone
-│   ├── ProcessingStatus.tsx # Step-by-step progress indicator
+│   ├── FileUpload.tsx      # Drag & drop + Google Doc link support
+│   ├── ModeSelector.tsx    # Quick Convert vs AI Enhanced toggle
+│   ├── ProcessingStatus.tsx # Step-by-step progress with cancel
 │   ├── ResultsView.tsx     # Markdown preview and download
 │   └── VideoModal.tsx      # Demo video modal
 ├── services/
-│   └── geminiService.ts    # Google Gemini API integration
-│       ├── detectTabs()           # Phase 1: Identify tab boundaries
-│       ├── processTab()           # Phase 2: Process single tab
+│   └── geminiService.ts    # Document processing service
+│       ├── detectTabs()           # AI tab detection (PDFs)
+│       ├── detectTabsLocal()      # Local tab detection (DOCX)
+│       ├── processTab()           # AI processing per tab
+│       ├── processTabsDirect()    # Direct HTML→MD conversion
 │       └── processDocumentChunked() # Main orchestrator
 ├── utils/
 │   └── fileHelpers.ts      # File conversion utilities
@@ -54,25 +68,32 @@ pdf-to-markdown/
 
 ## Processing Architecture
 
-The app uses a **two-phase chunked processing** approach for reliable handling of large documents:
+The app offers two processing modes to balance speed and accuracy:
 
-### Phase 1: Tab Detection
+### Quick Convert Mode (DOCX only)
+Best for clean DOCX files exported from Google Docs.
+
+1. **Local Tab Detection** - Parses HTML for separator patterns (no AI call)
+2. **Direct Conversion** - Uses Turndown to convert HTML to Markdown
+3. **Split by Boundaries** - Divides content at detected tab separators
+
+**Benefits**: Very fast (~2-5 seconds), no API usage for conversion
+
+### AI Enhanced Mode (PDF + DOCX)
+Best for complex documents or PDFs with visual elements.
+
+#### Phase 1: Tab Detection
 - Gemini analyzes the document structure
 - Identifies all separator pages and tab boundaries
 - Returns lightweight metadata (tab names, page ranges)
-- Fast response (~5-10 seconds)
 
-### Phase 2: Parallel Tab Processing
+#### Phase 2: Parallel Tab Processing
 - Each tab is processed individually
 - Tabs are processed in batches of 3 in parallel
 - Each tab gets its own API call with focused page range
 - Progress updates shown for each tab
 
-### Benefits
-- **No token limits**: Each tab stays within output limits
-- **Faster processing**: Parallel execution
-- **Better accuracy**: Focused processing per section
-- **Real-time progress**: Users see which tab is being processed
+**Benefits**: Maximum accuracy, handles complex layouts and PDFs
 
 ## Getting Started
 
@@ -122,14 +143,25 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ## Usage
 
-1. **Export your Google Doc** as PDF or DOCX
-2. **Upload** the file via drag & drop or file picker
-3. **Watch progress** as each tab is detected and processed
-4. **Preview** the split Markdown files
-5. **Download** individually or as a ZIP
+1. **Get your document**:
+   - Export from Google Docs as DOCX (File → Download → Microsoft Word)
+   - Or paste a Google Doc link and click "Get DOCX" to download directly
+2. **Choose processing mode**:
+   - **Quick Convert** for fast local processing (DOCX recommended)
+   - **AI Enhanced** for complex documents or PDFs
+3. **Upload** the file via drag & drop or file picker
+4. **Watch progress** as each tab is detected and processed
+5. **Preview** the split Markdown files
+6. **Download** individually or as a ZIP
 
 ### Processing Times
 
+**Quick Convert Mode (DOCX)**
+| Document Size | Approximate Time |
+|---------------|------------------|
+| Any size | 2-5 seconds |
+
+**AI Enhanced Mode**
 | Document Size | Approximate Time |
 |---------------|------------------|
 | 1-3 tabs | 15-30 seconds |
@@ -137,7 +169,7 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 | 9-15 tabs | 1-2 minutes |
 | 15+ tabs | 2-4 minutes |
 
-*DOCX files process faster than PDFs (text vs. visual parsing)*
+*Quick Convert is recommended for DOCX files. Use AI Enhanced for PDFs or complex formatting.*
 
 ### Supported File Types
 
@@ -179,7 +211,7 @@ The project uses manual chunk splitting to keep bundle sizes under 500 kB for op
 |-------|----------|
 | `vendor-react` | React, React DOM |
 | `vendor-google` | Google Gemini SDK |
-| `vendor-docx` | Mammoth, JSZip |
+| `vendor-docx` | Mammoth, Turndown, JSZip |
 | `vendor-icons` | Lucide React icons |
 | `index` | Application code |
 

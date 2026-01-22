@@ -65,6 +65,9 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
   // Parse HTML to find headings
   const headingRegex = /<h([1-3])[^>]*>(.*?)<\/h\1>/gi;
   const strongParagraphRegex = /<p[^>]*>\s*<strong>(.*?)<\/strong>\s*<\/p>/gi;
+  // Also look for plain paragraphs that contain only kebab-case names (common in DOCX exports)
+  // Matches: <p>system-prompt</p> or <p><a id="..."></a>system-prompt</p>
+  const plainParagraphRegex = /<p[^>]*>(?:<a[^>]*><\/a>)?([a-z][\w]*(?:[-_][a-z][\w]*)+)\s*<\/p>/gi;
 
   interface FoundHeading {
     title: string;
@@ -93,6 +96,18 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
       if (!isDuplicate) {
         foundHeadings.push({ title, index: match.index });
       }
+    }
+  }
+
+  // Check for plain paragraphs with kebab-case/snake_case names (DOCX tab separators)
+  while ((match = plainParagraphRegex.exec(htmlContent)) !== null) {
+    const title = match[1].trim();
+    // Avoid duplicates
+    const isDuplicate = foundHeadings.some(h =>
+      Math.abs(h.index - match!.index) < 100 && h.title === title
+    );
+    if (!isDuplicate) {
+      foundHeadings.push({ title, index: match.index });
     }
   }
 
@@ -404,18 +419,9 @@ export const processDocumentChunked = async (
 
     let detection: DetectionResult;
 
-    if (mode === ProcessingMode.QUICK && input.type === 'html') {
-      // Quick mode + HTML: Use local detection (no AI call)
-      detection = detectTabsLocal(input.data);
-
-      if (!detection.tabs || detection.tabs.length === 0) {
-        // Fallback to AI detection if local detection finds nothing
-        detection = await detectTabs(input);
-      }
-    } else {
-      // AI Enhanced mode or PDF: Use AI for tab detection
-      detection = await detectTabs(input);
-    }
+    // Always use AI for tab detection - it's more reliable for arbitrary tab titles
+    // Local pattern-based detection is too brittle for real-world documents
+    detection = await detectTabs(input);
 
     if (!detection.tabs || detection.tabs.length === 0) {
       throw new Error("No tabs detected in the document. Make sure your document has separator pages.");
