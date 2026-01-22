@@ -69,6 +69,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
       model: 'gemini-2.5-flash',
       contents: contents,
       config: {
+        maxOutputTokens: 65536,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -104,7 +105,12 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
       throw new Error("No response from Gemini");
     }
 
-    return JSON.parse(text) as ProcessingResult;
+    try {
+      return JSON.parse(text) as ProcessingResult;
+    } catch (parseError) {
+      console.error("Failed to parse Gemini response:", text.slice(-500));
+      throw new Error("The document is too large. Try uploading a smaller PDF or splitting it into parts.");
+    }
 
   } catch (error) {
     console.error("Gemini API Error:", error);
