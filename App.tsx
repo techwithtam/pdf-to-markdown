@@ -4,49 +4,51 @@ import { FileUpload } from './components/FileUpload';
 import { ProcessingStatus } from './components/ProcessingStatus';
 import { ResultsView } from './components/ResultsView';
 import { VideoModal } from './components/VideoModal';
-import { AppState, ProcessedTab, ProcessingStep } from './types';
+import { AppState, ProcessedTab, ProcessingStep, ProcessingProgress } from './types';
 import { fileToBase64, convertDocxToHtml } from './utils/fileHelpers';
-import { processDocument } from './services/geminiService';
+import { processDocumentChunked } from './services/geminiService';
 import { AlertTriangle, Play } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [tabs, setTabs] = useState<ProcessedTab[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [processingStep, setProcessingStep] = useState<ProcessingStep>(ProcessingStep.READING);
+  const [progress, setProgress] = useState<ProcessingProgress>({ step: ProcessingStep.READING });
   const [isVideoOpen, setIsVideoOpen] = useState(false);
 
   const handleFileSelect = async (file: File) => {
     setAppState(AppState.PROCESSING);
-    setProcessingStep(ProcessingStep.READING);
+    setProgress({ step: ProcessingStep.READING });
     setErrorMessage(null);
 
     try {
-      let result;
+      setProgress({ step: ProcessingStep.CONVERTING });
 
-      setProcessingStep(ProcessingStep.CONVERTING);
+      let inputData: { type: 'pdf' | 'html'; data: string; mimeType: string };
 
       if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         const htmlContent = await convertDocxToHtml(file);
-
-        setProcessingStep(ProcessingStep.ANALYZING);
-        result = await processDocument({
-          type: 'html',
-          data: htmlContent,
-          mimeType: 'text/html'
-        });
+        inputData = { type: 'html', data: htmlContent, mimeType: 'text/html' };
       } else {
         const base64Data = await fileToBase64(file);
-
-        setProcessingStep(ProcessingStep.ANALYZING);
-        result = await processDocument({
-          type: 'pdf',
-          data: base64Data,
-          mimeType: file.type
-        });
+        inputData = { type: 'pdf', data: base64Data, mimeType: file.type };
       }
 
-      setProcessingStep(ProcessingStep.GENERATING);
+      // Use chunked processing with progress callback
+      const result = await processDocumentChunked(inputData, (phase, current, total, tabName) => {
+        if (phase === 'detecting') {
+          setProgress({ step: ProcessingStep.DETECTING });
+        } else if (phase === 'processing') {
+          setProgress({
+            step: ProcessingStep.PROCESSING_TABS,
+            currentTab: current,
+            totalTabs: total,
+            tabName: tabName
+          });
+        }
+      });
+
+      setProgress({ step: ProcessingStep.GENERATING });
       setTabs(result.tabs);
       setAppState(AppState.SUCCESS);
     } catch (error) {
@@ -62,6 +64,7 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
     setTabs([]);
     setErrorMessage(null);
+    setProgress({ step: ProcessingStep.READING });
   };
 
   return (
@@ -154,7 +157,7 @@ const App: React.FC = () => {
 
           {appState === AppState.PROCESSING && (
             <div className="max-w-2xl mx-auto animate-in fade-in">
-              <ProcessingStatus currentStep={processingStep} />
+              <ProcessingStatus progress={progress} />
             </div>
           )}
 
@@ -185,14 +188,14 @@ const App: React.FC = () => {
 
         <footer className="relative z-10 py-6 text-center text-sm text-slate-500">
           <p>
-            &copy; {new Date().getFullYear()} Brought to you by the{' '}
+            Brought to you by{' '}
             <a
               href="https://www.skool.com/bewarethedefault/about"
               target="_blank"
               rel="noopener noreferrer"
               className="text-orange-600 hover:text-orange-700 font-medium transition-colors"
             >
-              Cadence Team
+              Cadence
             </a>
           </p>
         </footer>

@@ -42,12 +42,37 @@ pdf-to-markdown/
 │   └── VideoModal.tsx      # Demo video modal
 ├── services/
 │   └── geminiService.ts    # Google Gemini API integration
+│       ├── detectTabs()           # Phase 1: Identify tab boundaries
+│       ├── processTab()           # Phase 2: Process single tab
+│       └── processDocumentChunked() # Main orchestrator
 ├── utils/
 │   └── fileHelpers.ts      # File conversion utilities
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
 ```
+
+## Processing Architecture
+
+The app uses a **two-phase chunked processing** approach for reliable handling of large documents:
+
+### Phase 1: Tab Detection
+- Gemini analyzes the document structure
+- Identifies all separator pages and tab boundaries
+- Returns lightweight metadata (tab names, page ranges)
+- Fast response (~5-10 seconds)
+
+### Phase 2: Parallel Tab Processing
+- Each tab is processed individually
+- Tabs are processed in batches of 3 in parallel
+- Each tab gets its own API call with focused page range
+- Progress updates shown for each tab
+
+### Benefits
+- **No token limits**: Each tab stays within output limits
+- **Faster processing**: Parallel execution
+- **Better accuracy**: Focused processing per section
+- **Real-time progress**: Users see which tab is being processed
 
 ## Getting Started
 
@@ -99,9 +124,20 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 1. **Export your Google Doc** as PDF or DOCX
 2. **Upload** the file via drag & drop or file picker
-3. **Wait** for processing (typically 10-30 seconds)
+3. **Watch progress** as each tab is detected and processed
 4. **Preview** the split Markdown files
 5. **Download** individually or as a ZIP
+
+### Processing Times
+
+| Document Size | Approximate Time |
+|---------------|------------------|
+| 1-3 tabs | 15-30 seconds |
+| 4-8 tabs | 30-60 seconds |
+| 9-15 tabs | 1-2 minutes |
+| 15+ tabs | 2-4 minutes |
+
+*DOCX files process faster than PDFs (text vs. visual parsing)*
 
 ### Supported File Types
 
@@ -160,6 +196,6 @@ MIT
 
 ## Credits
 
-Built by the [Cadence Team](https://www.skool.com/bewarethedefault/about)
+Built by [Cadence](https://www.skool.com/bewarethedefault/about)
 
 Powered by [Google Gemini](https://deepmind.google/technologies/gemini/)

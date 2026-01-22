@@ -18,8 +18,16 @@ export enum AppState {
 export enum ProcessingStep {
   READING = 'READING',
   CONVERTING = 'CONVERTING',
-  ANALYZING = 'ANALYZING',
+  DETECTING = 'DETECTING',
+  PROCESSING_TABS = 'PROCESSING_TABS',
   GENERATING = 'GENERATING'
+}
+
+export interface ProcessingProgress {
+  step: ProcessingStep;
+  currentTab?: number;
+  totalTabs?: number;
+  tabName?: string;
 }
 
 export interface FileData {
