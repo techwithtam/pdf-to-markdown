@@ -38,36 +38,25 @@ export interface DetectionResult {
 
 /**
  * Local tab detection for HTML content (no AI needed)
- * Looks for heading patterns that indicate tab separators
+ * Looks for short standalone paragraphs that act as section dividers
  */
 export const detectTabsLocal = (htmlContent: string): DetectionResult => {
-  // Patterns that indicate a tab separator heading
-  // e.g., "00-navigation-guide", "01-foundation-collection", "system-prompt"
-  const separatorPatterns = [
-    // Numbered patterns: 00-something, 01-something
-    /^\d{1,2}[-_.]\s*[\w-]+$/i,
-    // Kebab-case patterns: some-thing-here
-    /^[a-z][\w]*(?:-[a-z][\w]*)+$/i,
-    // Snake_case patterns: some_thing_here
-    /^[a-z][\w]*(?:_[a-z][\w]*)+$/i,
-  ];
 
-  const isSeparatorTitle = (text: string): boolean => {
+  // Check if text looks like a tab separator (not regular content)
+  const isLikelySeparator = (text: string): boolean => {
     const trimmed = text.trim();
-    // Must be relatively short (separator titles are usually concise)
-    if (trimmed.length > 100 || trimmed.length < 3) return false;
+    // Must be short (1-50 chars) - tab titles are concise
+    if (trimmed.length > 50 || trimmed.length < 2) return false;
+    // Should not end with period (not a sentence)
+    if (trimmed.endsWith('.')) return false;
     // Should not contain multiple sentences
     if (trimmed.includes('. ')) return false;
-    // Check against patterns
-    return separatorPatterns.some(pattern => pattern.test(trimmed));
+    // Should not start with list markers
+    if (/^[-*•]\s/.test(trimmed)) return false;
+    // Should not be just a number
+    if (/^\d+$/.test(trimmed)) return false;
+    return true;
   };
-
-  // Parse HTML to find headings
-  const headingRegex = /<h([1-3])[^>]*>(.*?)<\/h\1>/gi;
-  const strongParagraphRegex = /<p[^>]*>\s*<strong>(.*?)<\/strong>\s*<\/p>/gi;
-  // Also look for plain paragraphs that contain only kebab-case names (common in DOCX exports)
-  // Matches: <p>system-prompt</p> or <p><a id="..."></a>system-prompt</p>
-  const plainParagraphRegex = /<p[^>]*>(?:<a[^>]*><\/a>)?([a-z][\w]*(?:[-_][a-z][\w]*)+)\s*<\/p>/gi;
 
   interface FoundHeading {
     title: string;
@@ -75,39 +64,28 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
   }
 
   const foundHeadings: FoundHeading[] = [];
-
-  // Find h1, h2, h3 headings
   let match;
-  while ((match = headingRegex.exec(htmlContent)) !== null) {
-    const title = match[2].replace(/<[^>]*>/g, '').trim(); // Strip inner HTML tags
-    if (isSeparatorTitle(title)) {
+
+  // Primary method: Find paragraphs with anchor IDs (DOCX bookmarks = section markers)
+  // Pattern: <p><a id="..."></a>Title</p>
+  const anchorParagraphRegex = /<p[^>]*><a\s+id="[^"]+"><\/a>([^<]+)<\/p>/gi;
+  while ((match = anchorParagraphRegex.exec(htmlContent)) !== null) {
+    const title = match[1].trim();
+    if (isLikelySeparator(title)) {
       foundHeadings.push({ title, index: match.index });
     }
   }
+  console.log("Local detection found tabs:", foundHeadings.map(h => h.title));
 
-  // Also check for bold paragraphs that might be separators
-  while ((match = strongParagraphRegex.exec(htmlContent)) !== null) {
-    const title = match[1].replace(/<[^>]*>/g, '').trim();
-    if (isSeparatorTitle(title)) {
-      // Avoid duplicates if already found as heading
-      const isDuplicate = foundHeadings.some(h =>
-        Math.abs(h.index - match!.index) < 100 && h.title === title
-      );
-      if (!isDuplicate) {
+  // If no anchor-based tabs found, fall back to pattern matching
+  if (foundHeadings.length === 0) {
+    // Kebab-case/snake_case patterns: system-prompt, user_guide, 00-intro, _nav-guide
+    const patternRegex = /<p[^>]*>(?:<a[^>]*><\/a>)?([\d_-]*[a-z][\w]*(?:[-_][\w]+)+)\s*<\/p>/gi;
+    while ((match = patternRegex.exec(htmlContent)) !== null) {
+      const title = match[1].trim();
+      if (isLikelySeparator(title)) {
         foundHeadings.push({ title, index: match.index });
       }
-    }
-  }
-
-  // Check for plain paragraphs with kebab-case/snake_case names (DOCX tab separators)
-  while ((match = plainParagraphRegex.exec(htmlContent)) !== null) {
-    const title = match[1].trim();
-    // Avoid duplicates
-    const isDuplicate = foundHeadings.some(h =>
-      Math.abs(h.index - match!.index) < 100 && h.title === title
-    );
-    if (!isDuplicate) {
-      foundHeadings.push({ title, index: match.index });
     }
   }
 
@@ -147,17 +125,25 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
   const ai = getAI();
 
   const prompt = `
-    Analyze this document and identify all the separate tabs/sections.
+    Analyze this document and identify ALL the separate tabs/sections that should be split into individual files.
 
-    Look for sparse separator pages with titles like "00-navigation-guide" that mark new sections.
+    **How to identify tab separators:**
+    - Look for SHORT standalone lines/paragraphs that act as SECTION DIVIDERS
+    - These are typically 1-5 words, sitting alone, followed by the section's content
+    - They can be ANY format: "Overview", "Chapter 1", "system-prompt", "_navigation-guide", "00-intro", "Getting Started"
+    - In HTML: often <p>Title Here</p> or <p><a id="..."></a>Title Here</p>
+    - They are NOT part of the content - they DIVIDE the document into logical sections
+    - Each divider marks where a new file should begin
 
-    Return ONLY the tab structure - do NOT extract the content yet.
-    For each tab, identify:
-    - The tab number (starting from 1)
-    - The filename (e.g., "00-navigation-guide.md")
-    - The original title found on the separator page
-    - The start page number
-    - The end page number (the page before the next separator, or the last page)
+    **CRITICAL: Scan the ENTIRE document. Every standalone short title = 1 tab.**
+
+    Return ONLY the tab structure - do NOT extract content.
+    For each tab:
+    - tabNumber: Sequential (1, 2, 3...)
+    - fileName: Convert to kebab-case.md (e.g., "Getting Started" -> "getting-started.md")
+    - originalTitle: Exact title text found
+    - startPage: Position in document order (1, 2, 3...)
+    - endPage: Position before next tab (or end)
   `;
 
   let contents;
@@ -213,7 +199,9 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
   }
 
   try {
-    return JSON.parse(text) as DetectionResult;
+    const result = JSON.parse(text) as DetectionResult;
+    console.log("Tab detection result:", JSON.stringify(result, null, 2));
+    return result;
   } catch (parseError) {
     console.error("Failed to parse tab detection response. Raw text:", text);
     throw new Error("Failed to parse document structure. The document format may not be supported or is too complex.");
@@ -236,6 +224,7 @@ export const processTab = async (
     **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, headers/footers, and noise.
     **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
     **IMPORTANT**: Only process pages ${tab.startPage}-${tab.endPage}, ignore all other pages.
+    **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
   `;
 
   let contents;
@@ -347,19 +336,31 @@ const processTabsDirect = (
 
   for (const tab of tabs) {
     const title = tab.originalTitle || tab.fileName.replace('.md', '');
+    const escapedTitle = escapeRegex(title);
+    // Turndown escapes underscores with backslash: _nav -> \_nav
+    // So also search for version with \\_ instead of _
+    const escapedTitleWithBackslash = escapeRegex(title.replace(/_/g, '\\_'));
+
     // Look for the title as a heading (# Title) or standalone line
     const patterns = [
-      new RegExp(`^#{1,3}\\s*${escapeRegex(title)}\\s*$`, 'mi'),
-      new RegExp(`^\\*\\*${escapeRegex(title)}\\*\\*\\s*$`, 'mi'),
-      new RegExp(`^${escapeRegex(title)}\\s*$`, 'mi'),
+      new RegExp(`^#{1,3}\\s*${escapedTitle}\\s*$`, 'mi'),
+      new RegExp(`^\\*\\*${escapedTitle}\\*\\*\\s*$`, 'mi'),
+      new RegExp(`^${escapedTitle}\\s*$`, 'mi'),
+      // Turndown escapes underscores with backslash
+      new RegExp(`^${escapedTitleWithBackslash}\\s*$`, 'mi'),
     ];
 
+    let found = false;
     for (const pattern of patterns) {
       const match = fullMarkdown.match(pattern);
       if (match && match.index !== undefined) {
         splitPoints.push({ index: match.index, tab });
+        found = true;
         break;
       }
+    }
+    if (!found) {
+      console.log(`Could not find split point for tab: "${title}"`);
     }
   }
 
@@ -385,7 +386,22 @@ const processTabsDirect = (
 
     const startIndex = current.index;
     const endIndex = next ? next.index : fullMarkdown.length;
-    const content = fullMarkdown.slice(startIndex, endIndex).trim();
+    let content = fullMarkdown.slice(startIndex, endIndex).trim();
+
+    // Remove the tab title from the beginning of the content
+    // It appears as a standalone line at the start
+    const title = current.tab.originalTitle || current.tab.fileName.replace('.md', '');
+    const titlePatterns = [
+      new RegExp(`^#{1,3}\\s*${escapeRegex(title)}\\s*[\\r\\n]*`, 'i'),
+      new RegExp(`^\\*\\*${escapeRegex(title)}\\*\\*\\s*[\\r\\n]*`, 'i'),
+      new RegExp(`^${escapeRegex(title)}\\s*[\\r\\n]*`, 'i'),
+    ];
+    for (const pattern of titlePatterns) {
+      if (pattern.test(content)) {
+        content = content.replace(pattern, '').trim();
+        break;
+      }
+    }
 
     results.push({
       fileName: current.tab.fileName,
@@ -419,9 +435,18 @@ export const processDocumentChunked = async (
 
     let detection: DetectionResult;
 
-    // Always use AI for tab detection - it's more reliable for arbitrary tab titles
-    // Local pattern-based detection is too brittle for real-world documents
-    detection = await detectTabs(input);
+    if (mode === ProcessingMode.QUICK && input.type === 'html') {
+      // Quick mode + HTML: Use fast local detection first
+      detection = detectTabsLocal(input.data);
+
+      // Fallback to AI only if local detection finds 0 or 1 tab (likely missed some)
+      if (detection.tabs.length <= 1) {
+        detection = await detectTabs(input);
+      }
+    } else {
+      // AI Enhanced mode or PDF: Use AI for tab detection
+      detection = await detectTabs(input);
+    }
 
     if (!detection.tabs || detection.tabs.length === 0) {
       throw new Error("No tabs detected in the document. Make sure your document has separator pages.");
