@@ -69,7 +69,7 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
     model: 'gemini-2.5-flash',
     contents: contents,
     config: {
-      maxOutputTokens: 4096,
+      maxOutputTokens: 65536,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -98,12 +98,7 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
     }
   });
 
-  // Debug logging
-  console.log("Gemini response object:", JSON.stringify(response, null, 2).slice(0, 1000));
-
   const text = response.text;
-  console.log("Response text:", text ? text.slice(0, 500) : "EMPTY");
-
   if (!text || text.trim() === '') {
     throw new Error("No response from Gemini during tab detection. The document may be too complex or contain unsupported content.");
   }
