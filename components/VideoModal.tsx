@@ -33,7 +33,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose }) => {
         {/* Video embed */}
         <div className="aspect-video relative">
           <iframe
-            src="https://www.tella.tv/video/vid_cmkoq2sjb004x04kv04irenhv/embed?b=0&title=0&a=1&loop=0&t=0&muted=0&wt=0"
+            src="https://www.tella.tv/video/vid_cmkpym80x000l04l52j2s1zkg/embed?b=0&title=0&a=1&loop=0&t=0&muted=0&wt=0"
             className="absolute top-0 left-0 w-full h-full border-0"
             allowFullScreen
             allowTransparency
