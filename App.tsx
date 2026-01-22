@@ -28,8 +28,6 @@ const App: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      setProgress({ step: ProcessingStep.CONVERTING });
-
       let inputData: { type: 'pdf' | 'html'; data: string; mimeType: string };
 
       if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {

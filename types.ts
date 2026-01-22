@@ -22,7 +22,6 @@ export enum ProcessingMode {
 
 export enum ProcessingStep {
   READING = 'READING',
-  CONVERTING = 'CONVERTING',
   DETECTING = 'DETECTING',
   PROCESSING_TABS = 'PROCESSING_TABS',
   GENERATING = 'GENERATING'

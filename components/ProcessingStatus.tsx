@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, FileText, RefreshCw, Search, Layers, FileOutput, X } from 'lucide-react';
+import { Check, FileText, Search, Layers, FileOutput, X } from 'lucide-react';
 import { ProcessingStep, ProcessingProgress } from '../types';
 
 interface ProcessingStatusProps {
@@ -9,7 +9,6 @@ interface ProcessingStatusProps {
 
 const steps = [
   { key: ProcessingStep.READING, label: 'Reading file', icon: FileText },
-  { key: ProcessingStep.CONVERTING, label: 'Converting document', icon: RefreshCw },
   { key: ProcessingStep.DETECTING, label: 'Detecting tabs', icon: Search },
   { key: ProcessingStep.PROCESSING_TABS, label: 'Processing tabs', icon: Layers },
   { key: ProcessingStep.GENERATING, label: 'Generating markdown', icon: FileOutput },
@@ -17,7 +16,6 @@ const steps = [
 
 const stepOrder = [
   ProcessingStep.READING,
-  ProcessingStep.CONVERTING,
   ProcessingStep.DETECTING,
   ProcessingStep.PROCESSING_TABS,
   ProcessingStep.GENERATING,
