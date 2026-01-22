@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { UploadCloud, FileType, AlertCircle, Link as LinkIcon, Download, ArrowRight } from 'lucide-react';
+import { UploadCloud, FileType, AlertCircle, Link as LinkIcon } from 'lucide-react';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -10,7 +10,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docLink, setDocLink] = useState('');
-  const [downloadReadyUrl, setDownloadReadyUrl] = useState<string | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -58,20 +57,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
     }
   };
 
-  const handleLinkProcess = () => {
+  const handleGetDocx = () => {
     if (!docLink) return;
 
     const match = docLink.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
 
-    if (match && match[1]) {
-      const docId = match[1];
-      const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=pdf`;
-      setDownloadReadyUrl(exportUrl);
-      setError(null);
-    } else {
+    if (!match || !match[1]) {
       setError("Could not parse a valid Google Doc ID from that link.");
-      setDownloadReadyUrl(null);
+      return;
     }
+
+    const docId = match[1];
+    setError(null);
+
+    // Trigger direct download
+    window.location.href = `https://docs.google.com/document/d/${docId}/export?format=docx`;
   };
 
   return (
@@ -121,63 +121,31 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
 
       {/* Link Input Section */}
       <div className="bg-slate-900/90 backdrop-blur-sm p-6 rounded-2xl">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
           <LinkIcon className="w-4 h-4 text-orange-400" />
-          Paste Google Doc Link
+          Get DOCX from Google Doc
         </h3>
+        <p className="text-xs text-slate-400 mb-4">
+          Paste your Google Doc link to download as DOCX, then drop it above.
+        </p>
 
-        {!downloadReadyUrl ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="https://docs.google.com/document/d/..."
-              value={docLink}
-              onChange={(e) => setDocLink(e.target.value)}
-              className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-            <button
-              onClick={handleLinkProcess}
-              disabled={!docLink || disabled}
-              className="px-5 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl text-sm font-semibold hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 transition-all"
-            >
-              Get PDF
-            </button>
-          </div>
-        ) : (
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-2.5 rounded-xl">
-                <Download className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-white">Ready to Download</h4>
-                <p className="text-xs text-slate-400 mt-1 mb-3">
-                  Click below to download, then drag the file into the drop zone.
-                </p>
-                <div className="flex items-center gap-3">
-                  <a
-                    href={downloadReadyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg text-sm font-medium hover:from-orange-600 hover:to-amber-600 transition-all"
-                  >
-                    Download PDF
-                    <ArrowRight className="w-4 h-4" />
-                  </a>
-                  <button
-                    onClick={() => {
-                      setDownloadReadyUrl(null);
-                      setDocLink('');
-                    }}
-                    className="text-xs text-slate-400 hover:text-white transition-colors"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="https://docs.google.com/document/d/..."
+            value={docLink}
+            onChange={(e) => setDocLink(e.target.value)}
+            disabled={disabled}
+            className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50"
+          />
+          <button
+            onClick={handleGetDocx}
+            disabled={!docLink || disabled}
+            className="px-5 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl text-sm font-semibold hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 transition-all"
+          >
+            Get DOCX
+          </button>
+        </div>
       </div>
 
       {error && (

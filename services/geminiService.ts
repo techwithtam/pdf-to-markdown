@@ -36,6 +36,92 @@ export interface DetectionResult {
   tabs: DetectedTab[];
 }
 
+/**
+ * Local tab detection for HTML content (no AI needed)
+ * Looks for heading patterns that indicate tab separators
+ */
+export const detectTabsLocal = (htmlContent: string): DetectionResult => {
+  // Patterns that indicate a tab separator heading
+  // e.g., "00-navigation-guide", "01-foundation-collection", "system-prompt"
+  const separatorPatterns = [
+    // Numbered patterns: 00-something, 01-something
+    /^\d{1,2}[-_.]\s*[\w-]+$/i,
+    // Kebab-case patterns: some-thing-here
+    /^[a-z][\w]*(?:-[a-z][\w]*)+$/i,
+    // Snake_case patterns: some_thing_here
+    /^[a-z][\w]*(?:_[a-z][\w]*)+$/i,
+  ];
+
+  const isSeparatorTitle = (text: string): boolean => {
+    const trimmed = text.trim();
+    // Must be relatively short (separator titles are usually concise)
+    if (trimmed.length > 100 || trimmed.length < 3) return false;
+    // Should not contain multiple sentences
+    if (trimmed.includes('. ')) return false;
+    // Check against patterns
+    return separatorPatterns.some(pattern => pattern.test(trimmed));
+  };
+
+  // Parse HTML to find headings
+  const headingRegex = /<h([1-3])[^>]*>(.*?)<\/h\1>/gi;
+  const strongParagraphRegex = /<p[^>]*>\s*<strong>(.*?)<\/strong>\s*<\/p>/gi;
+
+  interface FoundHeading {
+    title: string;
+    index: number;
+  }
+
+  const foundHeadings: FoundHeading[] = [];
+
+  // Find h1, h2, h3 headings
+  let match;
+  while ((match = headingRegex.exec(htmlContent)) !== null) {
+    const title = match[2].replace(/<[^>]*>/g, '').trim(); // Strip inner HTML tags
+    if (isSeparatorTitle(title)) {
+      foundHeadings.push({ title, index: match.index });
+    }
+  }
+
+  // Also check for bold paragraphs that might be separators
+  while ((match = strongParagraphRegex.exec(htmlContent)) !== null) {
+    const title = match[1].replace(/<[^>]*>/g, '').trim();
+    if (isSeparatorTitle(title)) {
+      // Avoid duplicates if already found as heading
+      const isDuplicate = foundHeadings.some(h =>
+        Math.abs(h.index - match!.index) < 100 && h.title === title
+      );
+      if (!isDuplicate) {
+        foundHeadings.push({ title, index: match.index });
+      }
+    }
+  }
+
+  // Sort by position in document
+  foundHeadings.sort((a, b) => a.index - b.index);
+
+  // Convert to DetectedTab format
+  const tabs: DetectedTab[] = foundHeadings.map((heading, i) => {
+    // Generate filename from title
+    const fileName = heading.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') + '.md';
+
+    return {
+      tabNumber: i + 1,
+      fileName,
+      originalTitle: heading.title,
+      startPage: i + 1, // Use index as pseudo-page for HTML
+      endPage: i + 1,
+    };
+  });
+
+  return {
+    totalPages: tabs.length,
+    tabs,
+  };
+};
+
 // Progress callback type
 export type ProgressCallback = (phase: 'detecting' | 'processing', current: number, total: number, tabName?: string) => void;
 
@@ -313,9 +399,23 @@ export const processDocumentChunked = async (
   mode: ProcessingMode = ProcessingMode.AI_ENHANCED
 ): Promise<ProcessingResult> => {
   try {
-    // Phase 1: Detect tabs (always uses AI)
+    // Phase 1: Detect tabs
     onProgress('detecting', 0, 0);
-    const detection = await detectTabs(input);
+
+    let detection: DetectionResult;
+
+    if (mode === ProcessingMode.QUICK && input.type === 'html') {
+      // Quick mode + HTML: Use local detection (no AI call)
+      detection = detectTabsLocal(input.data);
+
+      if (!detection.tabs || detection.tabs.length === 0) {
+        // Fallback to AI detection if local detection finds nothing
+        detection = await detectTabs(input);
+      }
+    } else {
+      // AI Enhanced mode or PDF: Use AI for tab detection
+      detection = await detectTabs(input);
+    }
 
     if (!detection.tabs || detection.tabs.length === 0) {
       throw new Error("No tabs detected in the document. Make sure your document has separator pages.");
