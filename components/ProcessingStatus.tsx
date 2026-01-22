@@ -9,7 +9,7 @@ interface ProcessingStatusProps {
 const steps = [
   { key: ProcessingStep.READING, label: 'Reading file', icon: FileText },
   { key: ProcessingStep.CONVERTING, label: 'Converting document', icon: RefreshCw },
-  { key: ProcessingStep.ANALYZING, label: 'Analyzing with Gemini', icon: Brain },
+  { key: ProcessingStep.ANALYZING, label: 'Analyzing with AI', icon: Brain },
   { key: ProcessingStep.GENERATING, label: 'Generating markdown', icon: FileOutput },
 ];
 

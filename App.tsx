@@ -81,7 +81,7 @@ const App: React.FC = () => {
               <div className="flex justify-center">
                 <div className="inline-flex items-center gap-2 bg-slate-900/90 text-white text-sm px-4 py-2 rounded-full">
                   <span className="bg-white text-slate-900 text-xs font-bold px-2 py-0.5 rounded">New</span>
-                  <span className="text-slate-200">Powered by Gemini 3 Flash</span>
+                  <span className="text-slate-200">Powered by Gemini 2.0 Flash</span>
                 </div>
               </div>
 

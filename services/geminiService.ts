@@ -66,7 +66,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
 
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash',
+      model: 'gemini-2.0-flash',
       contents: contents,
       config: {
         responseMimeType: "application/json",
