@@ -1,13 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ProcessingResult } from '../types';
 
-const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 interface ProcessInput {
   type: 'pdf' | 'html';
@@ -19,24 +13,23 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
   try {
     let contents;
     
-    // Optimized prompt that knows the structure of "Google Doc Tabs" exports
+    // Optimized prompt for Knowledge Base/AI-ready Markdown
     const commonInstructions = `
-      You are a high-speed document splitter. This document is an export of a multi-tab Google Document.
-      
+      You are an expert Knowledge Base architect and Document Splitter. 
+      This document is an export of a multi-tab Google Document, likely containing "Start of OCR" or "Screenshot" markers.
+
       **STRUCTURAL PATTERN TO DETECT:**
-      The document uses "Separator Pages" to denote the start of a new tab.
-      - A Separator Page usually contains very little text (often just 1-2 lines).
-      - It typically contains the tab name or filename, often with suffixes like "(updated)", "(new)", or "(original)".
-      - Examples from this document structure: "system-instructions (updated)", "00-navigation-guide (new)", "04-output-template".
+      1. **Tab Separators**: Look for sparse pages containing titles like "00-navigation-guide (new)" or "system-instructions (updated)". These mark the start of a new file.
+      2. **Noise Artifacts**: The document contains artifacts like "==Start of OCR for page X==", "==Screenshot for page X==", or "==End of OCR...". You MUST ignore and remove these lines completely.
       
       **YOUR TASK:**
-      1. Scan the document to find these Separator Pages.
-      2. Treat everything following a Separator Page (until the next Separator Page) as the content for that tab.
-      3. **Filename Generation**: Use the text from the Separator Page. Clean it up:
-         - Remove suffixes like "(updated)", "(new)".
-         - Replace spaces with dashes or underscores.
-         - Ensure it ends in ".md".
-      4. **Content Formatting**: Convert the extracted section content into clean Markdown. Preserve headers, lists, and tables.
+      1. **Split**: Identify the "Tabs" based on the separator pages.
+      2. **Filename Generation**: Create a clean filename ending in .md (e.g., "00-navigation-guide.md") from the separator title.
+      3. **Knowledge Base Optimization**: 
+         - Extract the content for each tab into **high-quality, semantic Markdown**.
+         - **Optimize for AI/RAG**: Ensure clear H1/H2/H3 hierarchy. Do not flatten the structure. AI models rely on these headers for context.
+         - **Clean**: Remove all page numbers, OCR markers, and visual noise.
+         - **Tables**: Ensure tables are formatted as valid Markdown tables.
       
       Return the result strictly as JSON.
     `;
@@ -76,9 +69,8 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
       };
     }
 
-    const ai = getAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Switched to Flash for speed
+      model: 'gemini-3-flash-preview',
       contents: contents,
       config: {
         responseMimeType: "application/json",
@@ -100,7 +92,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
                   },
                   markdownContent: {
                     type: Type.STRING,
-                    description: "The extracted content in Markdown"
+                    description: "The extracted content in AI-optimized Markdown"
                   }
                 },
                 required: ["fileName", "markdownContent"]
