@@ -19,25 +19,14 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
   try {
     let contents;
     
-    // Optimized prompt for Knowledge Base/AI-ready Markdown
+    // Simplified prompt for faster processing
     const commonInstructions = `
-      You are an expert Knowledge Base architect and Document Splitter. 
-      This document is an export of a multi-tab Google Document, likely containing "Start of OCR" or "Screenshot" markers.
+      Split this multi-tab document into separate files.
 
-      **STRUCTURAL PATTERN TO DETECT:**
-      1. **Tab Separators**: Look for sparse pages containing titles like "00-navigation-guide (new)" or "system-instructions (updated)". These mark the start of a new file.
-      2. **Noise Artifacts**: The document contains artifacts like "==Start of OCR for page X==", "==Screenshot for page X==", or "==End of OCR...". You MUST ignore and remove these lines completely.
-      
-      **YOUR TASK:**
-      1. **Split**: Identify the "Tabs" based on the separator pages.
-      2. **Filename Generation**: Create a clean filename ending in .md (e.g., "00-navigation-guide.md") from the separator title.
-      3. **Knowledge Base Optimization**: 
-         - Extract the content for each tab into **high-quality, semantic Markdown**.
-         - **Optimize for AI/RAG**: Ensure clear H1/H2/H3 hierarchy. Do not flatten the structure. AI models rely on these headers for context.
-         - **Clean**: Remove all page numbers, OCR markers, and visual noise.
-         - **Tables**: Ensure tables are formatted as valid Markdown tables.
-      
-      Return the result strictly as JSON.
+      **DETECT**: Sparse separator pages with titles like "00-navigation-guide" mark new tabs.
+      **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, and noise.
+      **OUTPUT**: For each tab, return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
+      **FILENAME**: Generate .md filename from separator title (e.g., "00-navigation-guide.md").
     `;
 
     if (input.type === 'pdf') {
@@ -77,7 +66,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
 
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-flash',
       contents: contents,
       config: {
         responseMimeType: "application/json",

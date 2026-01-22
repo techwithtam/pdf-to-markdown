@@ -15,6 +15,13 @@ export enum AppState {
   ERROR = 'ERROR'
 }
 
+export enum ProcessingStep {
+  READING = 'READING',
+  CONVERTING = 'CONVERTING',
+  ANALYZING = 'ANALYZING',
+  GENERATING = 'GENERATING'
+}
+
 export interface FileData {
   name: string;
   type: string;

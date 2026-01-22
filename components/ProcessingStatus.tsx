@@ -1,29 +1,104 @@
 import React from 'react';
-import { Loader2, Zap } from 'lucide-react';
+import { Check, FileText, RefreshCw, Brain, FileOutput } from 'lucide-react';
+import { ProcessingStep } from '../types';
 
-export const ProcessingStatus: React.FC = () => {
+interface ProcessingStatusProps {
+  currentStep: ProcessingStep;
+}
+
+const steps = [
+  { key: ProcessingStep.READING, label: 'Reading file', icon: FileText },
+  { key: ProcessingStep.CONVERTING, label: 'Converting document', icon: RefreshCw },
+  { key: ProcessingStep.ANALYZING, label: 'Analyzing with Gemini', icon: Brain },
+  { key: ProcessingStep.GENERATING, label: 'Generating markdown', icon: FileOutput },
+];
+
+const stepOrder = [
+  ProcessingStep.READING,
+  ProcessingStep.CONVERTING,
+  ProcessingStep.ANALYZING,
+  ProcessingStep.GENERATING,
+];
+
+export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ currentStep }) => {
+  const currentIndex = stepOrder.indexOf(currentStep);
+
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
-      <div className="relative">
-        <div className="absolute inset-0 bg-amber-200 rounded-full blur-xl opacity-50 animate-pulse"></div>
-        <div className="relative bg-white p-4 rounded-full shadow-lg border border-slate-100">
-          <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+    <div className="flex flex-col items-center justify-center py-12 text-center space-y-8">
+      {/* Header */}
+      <div className="space-y-3">
+        <div className="inline-flex items-center gap-2 bg-slate-900/90 text-white text-sm px-4 py-2 rounded-full">
+          <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+          <span className="text-slate-200">Processing</span>
         </div>
-      </div>
-      
-      <div className="space-y-2 max-w-md">
-        <h3 className="text-xl font-semibold text-slate-900 flex items-center justify-center gap-2">
-          <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
-          Rapid Processing
-        </h3>
-        <p className="text-slate-500">
-          Gemini Flash is splitting your document. This should only take a few seconds...
-        </p>
+        <h3 className="text-3xl font-bold text-slate-900">Splitting your document</h3>
+        <p className="text-slate-600">This may take a moment for large files</p>
       </div>
 
-      <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full bg-amber-500 animate-progress-fast rounded-full"></div>
+      {/* Progress Card */}
+      <div className="w-full max-w-md bg-slate-900/90 backdrop-blur-sm rounded-2xl p-6 space-y-4">
+        {steps.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isPending = index > currentIndex;
+          const Icon = step.icon;
+
+          return (
+            <div
+              key={step.key}
+              className={`
+                flex items-center gap-4 p-4 rounded-xl transition-all duration-300
+                ${isCompleted ? 'bg-green-500/20' : ''}
+                ${isCurrent ? 'bg-orange-500/20' : ''}
+                ${isPending ? 'bg-slate-800/50 opacity-50' : ''}
+              `}
+            >
+              <div
+                className={`
+                  w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
+                  ${isCompleted ? 'bg-green-500' : ''}
+                  ${isCurrent ? 'bg-gradient-to-br from-orange-500 to-amber-500' : ''}
+                  ${isPending ? 'bg-slate-700' : ''}
+                `}
+              >
+                {isCompleted ? (
+                  <Check className="w-5 h-5 text-white" />
+                ) : (
+                  <Icon className={`w-5 h-5 text-white ${isCurrent ? 'animate-pulse' : ''}`} />
+                )}
+              </div>
+
+              <div className="flex-1 text-left">
+                <p
+                  className={`
+                    font-medium transition-colors duration-300
+                    ${isCompleted ? 'text-green-400' : ''}
+                    ${isCurrent ? 'text-white' : ''}
+                    ${isPending ? 'text-slate-500' : ''}
+                  `}
+                >
+                  {step.label}
+                </p>
+                {isCurrent && (
+                  <p className="text-sm text-orange-400 mt-0.5">In progress...</p>
+                )}
+                {isCompleted && (
+                  <p className="text-sm text-green-500 mt-0.5">Done</p>
+                )}
+              </div>
+
+              {isCurrent && (
+                <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {/* Footer note */}
+      <p className="text-xs text-slate-500 max-w-sm">
+        Large documents with many tabs may take longer to analyze
+      </p>
     </div>
   );
 };
