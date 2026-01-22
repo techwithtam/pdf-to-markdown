@@ -98,7 +98,12 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
     }
   });
 
+  // Debug logging
+  console.log("Gemini response object:", JSON.stringify(response, null, 2).slice(0, 1000));
+
   const text = response.text;
+  console.log("Response text:", text ? text.slice(0, 500) : "EMPTY");
+
   if (!text || text.trim() === '') {
     throw new Error("No response from Gemini during tab detection. The document may be too complex or contain unsupported content.");
   }
@@ -106,7 +111,7 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
   try {
     return JSON.parse(text) as DetectionResult;
   } catch (parseError) {
-    console.error("Failed to parse tab detection response:", text.slice(0, 500));
+    console.error("Failed to parse tab detection response. Raw text:", text);
     throw new Error("Failed to parse document structure. The document format may not be supported or is too complex.");
   }
 };
