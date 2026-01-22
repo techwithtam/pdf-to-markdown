@@ -84,18 +84,20 @@ Best for clean DOCX files exported from Google Docs.
 ### AI Enhanced Mode (PDF + DOCX)
 Best for complex documents or PDFs with visual elements.
 
-#### Phase 1: Tab Detection
-- Gemini analyzes the document structure
-- Identifies all separator pages and tab boundaries
+#### Phase 1: Tab Detection (Optimized)
+- **DOCX files**: Uses fast local detection first (instant, no API call)
+- **PDFs**: Uses AI detection (required since PDFs can't be parsed locally)
+- **Fallback**: If local detection finds ≤1 tab, automatically uses AI detection
 - Returns lightweight metadata (tab names, page ranges)
 
 #### Phase 2: Parallel Tab Processing
-- Each tab is processed individually
+- Each tab is processed individually with only its content slice (not the full document)
 - Tabs are processed in batches of 3 in parallel
-- Each tab gets its own API call with focused page range
+- Each tab gets its own API call for AI-powered Markdown conversion
+- Includes retry logic with exponential backoff for reliability
 - Progress updates shown for each tab
 
-**Benefits**: Maximum accuracy, handles complex layouts and PDFs
+**Benefits**: Maximum accuracy, handles complex layouts and PDFs, optimized for speed
 
 ## Getting Started
 
@@ -165,7 +167,15 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 |---------------|------------------|
 | Any size | 2-5 seconds |
 
-**AI Enhanced Mode**
+**AI Enhanced Mode (DOCX with bookmarks)**
+| Document Size | Approximate Time |
+|---------------|------------------|
+| 1-3 tabs | 5-15 seconds |
+| 4-8 tabs | 15-30 seconds |
+| 9-15 tabs | 30-60 seconds |
+| 15+ tabs | 1-2 minutes |
+
+**AI Enhanced Mode (PDF or DOCX without bookmarks)**
 | Document Size | Approximate Time |
 |---------------|------------------|
 | 1-3 tabs | 15-30 seconds |
@@ -173,7 +183,7 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 | 9-15 tabs | 1-2 minutes |
 | 15+ tabs | 2-4 minutes |
 
-*Quick Convert is recommended for DOCX files. Use AI Enhanced for PDFs or complex formatting.*
+*Quick Convert is recommended for simple DOCX files. AI Enhanced provides better Markdown quality and handles PDFs.*
 
 ### Supported File Types
 
@@ -182,24 +192,43 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ### How Tab Detection Works
 
-**Quick Convert Mode (Local Detection)**
+Tab detection is optimized for speed by using local detection first, with AI as a fallback.
 
-For DOCX files, tab detection uses anchor tags from document bookmarks:
+#### Step 1: Local Detection (Instant)
+
+For DOCX files (both modes), the app first attempts local detection using anchor tags:
 - When you add bookmarks in Google Docs (Insert → Bookmark), they export as `<a id="..."></a>` anchors
 - The local detector finds paragraphs with anchors: `<p><a id="bookmark-id"></a>Tab Title</p>`
-- This is fast and reliable since bookmarks explicitly mark section boundaries
+- This is **instant** (no API call needed) and reliable since bookmarks explicitly mark section boundaries
 - Supports any title format (plain text, numbers, special characters like `_navigation-guide`)
 
-**AI Enhanced Mode**
+#### Step 2: AI Fallback (If Needed)
 
-For PDFs or when local detection finds ≤1 tab, AI detection is used:
-- Gemini analyzes the document structure
+AI detection is only used when:
+- Local detection finds ≤1 tab (document may lack bookmarks)
+- The file is a PDF (cannot be parsed locally)
+
+When AI detection runs:
+- Gemini analyzes the entire document structure
 - Looks for "separator pages" - sparse pages that mark section boundaries
 - Identifies tab titles regardless of formatting convention
 
-**Splitting**
+#### Detection Speed Comparison
 
-Once tabs are detected, the content is split at each separator. The converter handles special characters that may be escaped during HTML→Markdown conversion (e.g., underscores become `\_` in Markdown).
+| File Type | Detection Method | Speed |
+|-----------|-----------------|-------|
+| DOCX with bookmarks | Local (instant) | ~0.1 seconds |
+| DOCX without bookmarks | AI fallback | ~10-30 seconds |
+| PDF | AI (required) | ~10-30 seconds |
+
+**Tip**: For fastest processing, add bookmarks in Google Docs before exporting. Each bookmark becomes a tab separator.
+
+#### Content Splitting
+
+Once tabs are detected, the content is split at each separator:
+- For DOCX: HTML is sliced at detected boundaries, then each slice is processed separately
+- This means each tab only sends its own content to the AI (not the full document)
+- The converter handles special characters that may be escaped during HTML→Markdown conversion (e.g., underscores become `\_` in Markdown)
 
 ## Development
 

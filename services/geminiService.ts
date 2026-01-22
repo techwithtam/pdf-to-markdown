@@ -538,25 +538,22 @@ export const processDocumentChunked = async (
 
     let detection: DetectionResult;
 
-    if (mode === ProcessingMode.QUICK && input.type === 'html') {
-      // Quick mode + HTML: Use fast local detection first
+    if (input.type === 'html') {
+      // For HTML (DOCX): Always try fast local detection first
+      // This finds tabs via anchor tags from document bookmarks - instant!
       detection = detectTabsLocal(input.data);
+      console.log(`Local detection found ${detection.tabs.length} tabs`);
 
       // Fallback to AI only if local detection finds 0 or 1 tab (likely missed some)
       if (detection.tabs.length <= 1) {
+        console.log('Local detection insufficient, falling back to AI...');
         detection = await detectTabs(input);
-        // For AI-detected tabs on HTML, find HTML boundaries for slicing
-        if (input.type === 'html') {
-          detection.tabs = findHtmlBoundaries(input.data, detection.tabs);
-        }
-      }
-    } else {
-      // AI Enhanced mode or PDF: Use AI for tab detection
-      detection = await detectTabs(input);
-      // For AI-detected tabs on HTML, find HTML boundaries for slicing
-      if (input.type === 'html') {
+        // For AI-detected tabs, find HTML boundaries for slicing
         detection.tabs = findHtmlBoundaries(input.data, detection.tabs);
       }
+    } else {
+      // PDF: Must use AI for tab detection (can't parse PDF locally)
+      detection = await detectTabs(input);
     }
 
     if (!detection.tabs || detection.tabs.length === 0) {
