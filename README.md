@@ -9,13 +9,14 @@ Upload a PDF or DOCX file exported from Google Docs, and the app will:
 1. **Detect tab separators** - AI identifies where each section/tab begins and ends
 2. **Clean the content** - Removes OCR artifacts, page numbers, and formatting noise
 3. **Generate Markdown** - Outputs clean `.md` files with proper heading hierarchy
-4. **Download** - Get individual files or download all as a ZIP
+4. **Download** - Get individual files or download all as a ZIP (in `.md` or `.txt` format)
 
 ## Features
 
 - **Two Processing Modes**:
   - **Quick Convert** - Fast local conversion using Turndown (best for DOCX)
   - **AI Enhanced** - Full AI processing for maximum accuracy (best for PDFs)
+- **Export Format Options** - Download as Markdown (`.md`) or Plain Text (`.txt`)
 - **Google Doc Link Support** - Paste a Google Doc link to download as DOCX directly
 - **Cancel Processing** - Stop processing at any time and start over
 - **Real-time Progress** - See which tab is being processed with live updates
@@ -50,7 +51,7 @@ pdf-to-markdown/
 │   ├── FileUpload.tsx      # Drag & drop + Google Doc link support
 │   ├── ModeSelector.tsx    # Quick Convert vs AI Enhanced toggle
 │   ├── ProcessingStatus.tsx # Step-by-step progress with cancel
-│   ├── ResultsView.tsx     # Markdown preview and download
+│   ├── ResultsView.tsx     # Markdown preview and download (md/txt formats)
 │   └── VideoModal.tsx      # Demo video modal
 ├── services/
 │   └── geminiService.ts    # Document processing service
@@ -60,7 +61,7 @@ pdf-to-markdown/
 │       ├── processTabsDirect()    # Direct HTML→MD splitting with escape handling
 │       └── processDocumentChunked() # Main orchestrator
 ├── utils/
-│   └── fileHelpers.ts      # File conversion utilities
+│   └── fileHelpers.ts      # File conversion and export utilities (md/txt)
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
@@ -153,7 +154,9 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 3. **Upload** the file via drag & drop or file picker
 4. **Watch progress** as each tab is detected and processed
 5. **Preview** the split Markdown files
-6. **Download** individually or as a ZIP
+6. **Download** individually or as a ZIP:
+   - Choose **Markdown (.md)** for formatted text with headings
+   - Choose **Plain Text (.txt)** for simple text files
 
 ### Processing Times
 

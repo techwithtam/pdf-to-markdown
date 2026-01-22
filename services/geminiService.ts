@@ -29,6 +29,8 @@ export interface DetectedTab {
   originalTitle: string;
   startPage: number;
   endPage: number;
+  htmlStartIndex?: number;  // Character position in HTML for slicing
+  htmlEndIndex?: number;    // Character position in HTML for slicing
 }
 
 export interface DetectionResult {
@@ -92,7 +94,7 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
   // Sort by position in document
   foundHeadings.sort((a, b) => a.index - b.index);
 
-  // Convert to DetectedTab format
+  // Convert to DetectedTab format with HTML indices for slicing
   const tabs: DetectedTab[] = foundHeadings.map((heading, i) => {
     // Generate filename from title
     const fileName = heading.title
@@ -100,12 +102,18 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') + '.md';
 
+    // Calculate HTML end index (start of next tab or end of document)
+    const nextHeading = foundHeadings[i + 1];
+    const htmlEndIndex = nextHeading ? nextHeading.index : htmlContent.length;
+
     return {
       tabNumber: i + 1,
       fileName,
       originalTitle: heading.title,
       startPage: i + 1, // Use index as pseudo-page for HTML
       endPage: i + 1,
+      htmlStartIndex: heading.index,
+      htmlEndIndex,
     };
   });
 
@@ -209,23 +217,36 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
 };
 
 /**
- * Phase 2: Process a single tab's content
+ * Phase 2: Process a single tab's content with retry logic
  */
 export const processTab = async (
   input: ProcessInput,
-  tab: DetectedTab
+  tab: DetectedTab,
+  maxRetries: number = 2
 ): Promise<ProcessedTab> => {
   const ai = getAI();
 
-  const prompt = `
-    Extract content ONLY from pages ${tab.startPage} to ${tab.endPage} of this document.
-    This section is titled "${tab.originalTitle}".
+  // For HTML input, use a simpler prompt since content is already sliced
+  const isSlicedHtml = input.type === 'html' && tab.htmlStartIndex !== undefined;
 
-    **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, headers/footers, and noise.
-    **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
-    **IMPORTANT**: Only process pages ${tab.startPage}-${tab.endPage}, ignore all other pages.
-    **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
-  `;
+  const prompt = isSlicedHtml
+    ? `
+      Convert this HTML content to clean Markdown.
+      This section is titled "${tab.originalTitle}".
+
+      **CLEAN**: Remove any noise, artifacts, or redundant whitespace.
+      **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
+      **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
+    `
+    : `
+      Extract content ONLY from pages ${tab.startPage} to ${tab.endPage} of this document.
+      This section is titled "${tab.originalTitle}".
+
+      **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, headers/footers, and noise.
+      **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
+      **IMPORTANT**: Only process pages ${tab.startPage}-${tab.endPage}, ignore all other pages.
+      **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
+    `;
 
   let contents;
   if (input.type === 'pdf') {
@@ -241,41 +262,53 @@ export const processTab = async (
     };
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: contents,
-    config: {
-      maxOutputTokens: 32768,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          markdownContent: {
-            type: Type.STRING,
-            description: "The extracted content in clean Markdown format"
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contents,
+        config: {
+          maxOutputTokens: 32768,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              markdownContent: {
+                type: Type.STRING,
+                description: "The extracted content in clean Markdown format"
+              }
+            },
+            required: ["markdownContent"]
           }
-        },
-        required: ["markdownContent"]
+        }
+      });
+
+      const text = response.text;
+      if (!text || text.trim() === '') {
+        throw new Error(`No response from Gemini for tab: ${tab.fileName}. The content may be too complex.`);
+      }
+
+      const result = JSON.parse(text);
+      return {
+        fileName: tab.fileName,
+        originalTitle: tab.originalTitle,
+        markdownContent: result.markdownContent
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Attempt ${attempt + 1}/${maxRetries + 1} failed for tab ${tab.fileName}:`, lastError.message);
+
+      // Wait before retry (exponential backoff)
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
       }
     }
-  });
-
-  const text = response.text;
-  if (!text || text.trim() === '') {
-    throw new Error(`No response from Gemini for tab: ${tab.fileName}. The content may be too complex.`);
   }
 
-  try {
-    const result = JSON.parse(text);
-    return {
-      fileName: tab.fileName,
-      originalTitle: tab.originalTitle,
-      markdownContent: result.markdownContent
-    };
-  } catch (parseError) {
-    console.error(`Failed to parse response for tab ${tab.fileName}:`, text.slice(0, 500));
-    throw new Error(`Failed to process tab "${tab.originalTitle || tab.fileName}". The content may be too large or complex.`);
-  }
+  console.error(`All retries exhausted for tab ${tab.fileName}`);
+  throw new Error(`Failed to process tab "${tab.originalTitle || tab.fileName}". The content may be too large or complex.`);
 };
 
 /**
@@ -296,7 +329,16 @@ const processTabsInBatches = async (
     const batchPromises = batch.map(async (tab, batchIndex) => {
       const globalIndex = i + batchIndex;
       onProgress('processing', globalIndex + 1, tabs.length, tab.originalTitle || tab.fileName);
-      return processTab(input, tab);
+
+      // For HTML input with HTML indices, slice the content for this tab only
+      // This dramatically reduces the payload size and avoids API limits
+      let tabInput = input;
+      if (input.type === 'html' && tab.htmlStartIndex !== undefined && tab.htmlEndIndex !== undefined) {
+        const slicedHtml = input.data.slice(tab.htmlStartIndex, tab.htmlEndIndex);
+        tabInput = { ...input, data: slicedHtml };
+      }
+
+      return processTab(tabInput, tab);
     });
 
     const batchResults = await Promise.all(batchPromises);
@@ -421,6 +463,67 @@ const escapeRegex = (str: string): string => {
 };
 
 /**
+ * Find HTML boundaries for tabs detected by AI (which don't have HTML indices)
+ * This allows us to slice HTML content even when AI detection was used
+ */
+const findHtmlBoundaries = (htmlContent: string, tabs: DetectedTab[]): DetectedTab[] => {
+  // If tabs already have HTML indices, return as-is
+  if (tabs.every(tab => tab.htmlStartIndex !== undefined)) {
+    return tabs;
+  }
+
+  interface BoundaryMatch {
+    tab: DetectedTab;
+    index: number;
+  }
+
+  const matches: BoundaryMatch[] = [];
+
+  for (const tab of tabs) {
+    const title = tab.originalTitle || tab.fileName.replace('.md', '');
+    const escapedTitle = escapeRegex(title);
+
+    // Try multiple patterns to find the tab in HTML
+    const patterns = [
+      // Paragraph with anchor: <p><a id="..."></a>Title</p>
+      new RegExp(`<p[^>]*><a\\s+id="[^"]+"><\\/a>\\s*${escapedTitle}\\s*<\\/p>`, 'i'),
+      // Simple paragraph: <p>Title</p>
+      new RegExp(`<p[^>]*>\\s*${escapedTitle}\\s*<\\/p>`, 'i'),
+      // Heading: <h1>Title</h1>
+      new RegExp(`<h[1-6][^>]*>\\s*${escapedTitle}\\s*<\\/h[1-6]>`, 'i'),
+    ];
+
+    for (const pattern of patterns) {
+      const match = htmlContent.match(pattern);
+      if (match && match.index !== undefined) {
+        matches.push({ tab, index: match.index });
+        break;
+      }
+    }
+  }
+
+  // Sort by position in document
+  matches.sort((a, b) => a.index - b.index);
+
+  // Assign HTML boundaries based on sorted order
+  return tabs.map(tab => {
+    const matchIndex = matches.findIndex(m => m.tab === tab);
+    if (matchIndex === -1) {
+      return tab; // No match found, keep original
+    }
+
+    const currentMatch = matches[matchIndex];
+    const nextMatch = matches[matchIndex + 1];
+
+    return {
+      ...tab,
+      htmlStartIndex: currentMatch.index,
+      htmlEndIndex: nextMatch ? nextMatch.index : htmlContent.length,
+    };
+  });
+};
+
+/**
  * Main entry point: Process document with chunked approach
  * @param mode - QUICK for direct conversion, AI_ENHANCED for full AI processing
  */
@@ -442,10 +545,18 @@ export const processDocumentChunked = async (
       // Fallback to AI only if local detection finds 0 or 1 tab (likely missed some)
       if (detection.tabs.length <= 1) {
         detection = await detectTabs(input);
+        // For AI-detected tabs on HTML, find HTML boundaries for slicing
+        if (input.type === 'html') {
+          detection.tabs = findHtmlBoundaries(input.data, detection.tabs);
+        }
       }
     } else {
       // AI Enhanced mode or PDF: Use AI for tab detection
       detection = await detectTabs(input);
+      // For AI-detected tabs on HTML, find HTML boundaries for slicing
+      if (input.type === 'html') {
+        detection.tabs = findHtmlBoundaries(input.data, detection.tabs);
+      }
     }
 
     if (!detection.tabs || detection.tabs.length === 0) {
