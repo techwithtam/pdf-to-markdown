@@ -15,6 +15,11 @@ export enum AppState {
   ERROR = 'ERROR'
 }
 
+export enum ProcessingMode {
+  QUICK = 'QUICK',
+  AI_ENHANCED = 'AI_ENHANCED'
+}
+
 export enum ProcessingStep {
   READING = 'READING',
   CONVERTING = 'CONVERTING',

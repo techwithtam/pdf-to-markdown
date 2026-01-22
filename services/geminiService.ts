@@ -1,5 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ProcessingResult, ProcessedTab } from '../types';
+import TurndownService from 'turndown';
+import { ProcessingResult, ProcessedTab, ProcessingMode } from '../types';
+
+// Initialize Turndown for HTML to Markdown conversion
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  bulletListMarker: '-',
+});
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
@@ -181,7 +189,7 @@ export const processTab = async (
 };
 
 /**
- * Process multiple tabs in parallel batches
+ * Process multiple tabs in parallel batches (AI Enhanced mode)
  */
 const processTabsInBatches = async (
   input: ProcessInput,
@@ -209,14 +217,103 @@ const processTabsInBatches = async (
 };
 
 /**
+ * Direct HTML to Markdown conversion (Quick Convert mode)
+ * Converts HTML to Markdown and splits by detected tab boundaries
+ */
+const processTabsDirect = (
+  htmlContent: string,
+  tabs: DetectedTab[],
+  onProgress: ProgressCallback
+): ProcessedTab[] => {
+  // Convert full HTML to Markdown
+  const fullMarkdown = turndown.turndown(htmlContent);
+
+  // If only one tab, return the full content
+  if (tabs.length === 1) {
+    onProgress('processing', 1, 1, tabs[0].originalTitle || tabs[0].fileName);
+    return [{
+      fileName: tabs[0].fileName,
+      originalTitle: tabs[0].originalTitle,
+      markdownContent: fullMarkdown.trim()
+    }];
+  }
+
+  // Split by tab separator titles
+  const results: ProcessedTab[] = [];
+
+  // Build regex patterns for each tab title to find split points
+  const splitPoints: { index: number; tab: DetectedTab }[] = [];
+
+  for (const tab of tabs) {
+    const title = tab.originalTitle || tab.fileName.replace('.md', '');
+    // Look for the title as a heading (# Title) or standalone line
+    const patterns = [
+      new RegExp(`^#{1,3}\\s*${escapeRegex(title)}\\s*$`, 'mi'),
+      new RegExp(`^\\*\\*${escapeRegex(title)}\\*\\*\\s*$`, 'mi'),
+      new RegExp(`^${escapeRegex(title)}\\s*$`, 'mi'),
+    ];
+
+    for (const pattern of patterns) {
+      const match = fullMarkdown.match(pattern);
+      if (match && match.index !== undefined) {
+        splitPoints.push({ index: match.index, tab });
+        break;
+      }
+    }
+  }
+
+  // Sort by position in document
+  splitPoints.sort((a, b) => a.index - b.index);
+
+  // If we couldn't find split points, return full content as single tab
+  if (splitPoints.length === 0) {
+    onProgress('processing', 1, 1, tabs[0].originalTitle || tabs[0].fileName);
+    return [{
+      fileName: tabs[0].fileName,
+      originalTitle: tabs[0].originalTitle,
+      markdownContent: fullMarkdown.trim()
+    }];
+  }
+
+  // Extract content between split points
+  for (let i = 0; i < splitPoints.length; i++) {
+    const current = splitPoints[i];
+    const next = splitPoints[i + 1];
+
+    onProgress('processing', i + 1, splitPoints.length, current.tab.originalTitle || current.tab.fileName);
+
+    const startIndex = current.index;
+    const endIndex = next ? next.index : fullMarkdown.length;
+    const content = fullMarkdown.slice(startIndex, endIndex).trim();
+
+    results.push({
+      fileName: current.tab.fileName,
+      originalTitle: current.tab.originalTitle,
+      markdownContent: content
+    });
+  }
+
+  return results;
+};
+
+/**
+ * Escape special regex characters in a string
+ */
+const escapeRegex = (str: string): string => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
  * Main entry point: Process document with chunked approach
+ * @param mode - QUICK for direct conversion, AI_ENHANCED for full AI processing
  */
 export const processDocumentChunked = async (
   input: ProcessInput,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  mode: ProcessingMode = ProcessingMode.AI_ENHANCED
 ): Promise<ProcessingResult> => {
   try {
-    // Phase 1: Detect tabs
+    // Phase 1: Detect tabs (always uses AI)
     onProgress('detecting', 0, 0);
     const detection = await detectTabs(input);
 
@@ -225,17 +322,25 @@ export const processDocumentChunked = async (
     }
 
     // Phase 2: Process each tab
-    const processedTabs = await processTabsInBatches(
-      input,
-      detection.tabs,
-      onProgress,
-      3 // Process 3 tabs in parallel
-    );
+    let processedTabs: ProcessedTab[];
+
+    if (mode === ProcessingMode.QUICK && input.type === 'html') {
+      // Quick Convert: Direct HTML to Markdown (no AI for content)
+      processedTabs = processTabsDirect(input.data, detection.tabs, onProgress);
+    } else {
+      // AI Enhanced: Full AI processing for each tab
+      processedTabs = await processTabsInBatches(
+        input,
+        detection.tabs,
+        onProgress,
+        3 // Process 3 tabs in parallel
+      );
+    }
 
     return { tabs: processedTabs };
 
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("Processing Error:", error);
     throw error;
   }
 };

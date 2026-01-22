@@ -1,9 +1,10 @@
 import React from 'react';
-import { Check, FileText, RefreshCw, Search, Layers, FileOutput } from 'lucide-react';
+import { Check, FileText, RefreshCw, Search, Layers, FileOutput, X } from 'lucide-react';
 import { ProcessingStep, ProcessingProgress } from '../types';
 
 interface ProcessingStatusProps {
   progress: ProcessingProgress;
+  onCancel?: () => void;
 }
 
 const steps = [
@@ -22,7 +23,7 @@ const stepOrder = [
   ProcessingStep.GENERATING,
 ];
 
-export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ progress }) => {
+export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ progress, onCancel }) => {
   const currentIndex = stepOrder.indexOf(progress.step);
 
   const getStepLabel = (step: typeof steps[0], index: number) => {
@@ -154,6 +155,17 @@ export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ progress }) 
           : "Large documents with many tabs may take longer to analyze"
         }
       </p>
+
+      {/* Cancel Button */}
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-full text-sm font-medium transition-all"
+        >
+          <X className="w-4 h-4" />
+          Cancel
+        </button>
+      )}
     </div>
   );
 };

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Header } from './components/Header';
 import { FileUpload } from './components/FileUpload';
+import { ModeSelector } from './components/ModeSelector';
 import { ProcessingStatus } from './components/ProcessingStatus';
 import { ResultsView } from './components/ResultsView';
 import { VideoModal } from './components/VideoModal';
-import { AppState, ProcessedTab, ProcessingStep, ProcessingProgress } from './types';
+import { AppState, ProcessedTab, ProcessingStep, ProcessingProgress, ProcessingMode } from './types';
 import { fileToBase64, convertDocxToHtml } from './utils/fileHelpers';
 import { processDocumentChunked } from './services/geminiService';
 import { AlertTriangle, Play } from 'lucide-react';
@@ -15,8 +16,13 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProcessingProgress>({ step: ProcessingStep.READING });
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>(ProcessingMode.AI_ENHANCED);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleFileSelect = async (file: File) => {
+    // Create new abort controller for this processing session
+    abortControllerRef.current = new AbortController();
+
     setAppState(AppState.PROCESSING);
     setProgress({ step: ProcessingStep.READING });
     setErrorMessage(null);
@@ -38,28 +44,38 @@ const App: React.FC = () => {
       }
 
       // Use chunked processing with progress callback
-      const result = await processDocumentChunked(inputData, (phase, current, total, tabName) => {
-        if (phase === 'detecting') {
-          setProgress({ step: ProcessingStep.DETECTING });
-        } else if (phase === 'processing') {
-          setProgress({
-            step: ProcessingStep.PROCESSING_TABS,
-            currentTab: current,
-            totalTabs: total,
-            tabName: tabName
-          });
-        }
-      });
+      const result = await processDocumentChunked(
+        inputData,
+        (phase, current, total, tabName) => {
+          if (phase === 'detecting') {
+            setProgress({ step: ProcessingStep.DETECTING });
+          } else if (phase === 'processing') {
+            setProgress({
+              step: ProcessingStep.PROCESSING_TABS,
+              currentTab: current,
+              totalTabs: total,
+              tabName: tabName
+            });
+          }
+        },
+        processingMode
+      );
 
       setProgress({ step: ProcessingStep.GENERATING });
       setTabs(result.tabs);
       setAppState(AppState.SUCCESS);
     } catch (error) {
+      // Don't show error if user cancelled
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error(error);
       setAppState(AppState.ERROR);
       setErrorMessage(
         error instanceof Error ? error.message : "An unexpected error occurred while processing the document."
       );
+    } finally {
+      abortControllerRef.current = null;
     }
   };
 
@@ -70,6 +86,14 @@ const App: React.FC = () => {
     setProgress({ step: ProcessingStep.READING });
   };
 
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    handleReset();
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans relative overflow-hidden">
       {/* Warm gradient background */}
@@ -78,7 +102,7 @@ const App: React.FC = () => {
 
       {/* Content */}
       <div className="relative z-10 flex flex-col min-h-screen">
-        <Header />
+        <Header onLogoClick={handleCancel} />
 
         <main className="flex-1 w-full px-6 py-8">
           {appState === AppState.IDLE && (
@@ -149,9 +173,12 @@ const App: React.FC = () => {
                   <span className="w-full border-t border-slate-300/50" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-gradient-to-br from-orange-100 via-amber-50 to-orange-200 px-4 text-slate-500 font-medium">Or drag & drop below</span>
+                  <span className="bg-gradient-to-br from-orange-100 via-amber-50 to-orange-200 px-4 text-slate-500 font-medium">Choose processing mode</span>
                 </div>
               </div>
+
+              {/* Mode Selector */}
+              <ModeSelector mode={processingMode} onChange={setProcessingMode} />
 
               {/* File Upload */}
               <FileUpload onFileSelect={handleFileSelect} />
@@ -160,7 +187,7 @@ const App: React.FC = () => {
 
           {appState === AppState.PROCESSING && (
             <div className="max-w-2xl mx-auto animate-in fade-in">
-              <ProcessingStatus progress={progress} />
+              <ProcessingStatus progress={progress} onCancel={handleCancel} />
             </div>
           )}
 
