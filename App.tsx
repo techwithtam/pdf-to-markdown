@@ -16,12 +16,20 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProcessingProgress>({ step: ProcessingStep.READING });
   const [isVideoOpen, setIsVideoOpen] = useState(false);
-  const [processingMode, setProcessingMode] = useState<ProcessingMode>(ProcessingMode.AI_ENHANCED);
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>(ProcessingMode.QUICK);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleFileSelect = async (file: File) => {
     // Create new abort controller for this processing session
     abortControllerRef.current = new AbortController();
+
+    // PDFs require AI Enhanced mode - auto-switch if needed
+    const isPdf = file.type === 'application/pdf';
+    const effectiveMode = isPdf ? ProcessingMode.AI_ENHANCED : processingMode;
+
+    if (isPdf && processingMode === ProcessingMode.QUICK) {
+      setProcessingMode(ProcessingMode.AI_ENHANCED);
+    }
 
     setAppState(AppState.PROCESSING);
     setProgress({ step: ProcessingStep.READING });
@@ -56,7 +64,7 @@ const App: React.FC = () => {
             });
           }
         },
-        processingMode
+        effectiveMode  // Use effective mode (always AI_ENHANCED for PDFs)
       );
 
       setProgress({ step: ProcessingStep.GENERATING });

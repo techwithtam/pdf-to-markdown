@@ -10,7 +10,7 @@ interface ModeSelectorProps {
 export const ModeSelector: React.FC<ModeSelectorProps> = ({ mode, onChange }) => {
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-1 flex gap-1">
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-1 flex gap-1 mb-2">
         {/* Quick Convert Option */}
         <button
           onClick={() => onChange(ProcessingMode.QUICK)}
@@ -93,6 +93,9 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ mode, onChange }) =>
           </div>
         </button>
       </div>
+      <p className="text-center text-xs text-slate-500">
+        For DOCX files only. PDFs always use AI Enhanced.
+      </p>
     </div>
   );
 };

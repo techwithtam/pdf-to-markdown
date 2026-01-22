@@ -14,7 +14,7 @@ Upload a PDF or DOCX file exported from Google Docs, and the app will:
 ## Features
 
 - **Two Processing Modes**:
-  - **Quick Convert** - Fast local conversion using Turndown (best for DOCX)
+  - **Quick Convert** (default) - Fast local conversion using Turndown (best for DOCX)
   - **AI Enhanced** - Full AI processing for maximum accuracy (best for PDFs)
 - **Export Format Options** - Download as Markdown (`.md`) or Plain Text (`.txt`)
 - **Google Doc Link Support** - Paste a Google Doc link to download as DOCX directly
@@ -150,7 +150,7 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 1. **Get your document**:
    - Export from Google Docs as DOCX (File → Download → Microsoft Word)
    - Or paste a Google Doc link and click "Get DOCX" to download directly
-2. **Choose processing mode**:
+2. **Choose processing mode** (Quick Convert is selected by default):
    - **Quick Convert** for fast local processing (DOCX recommended)
    - **AI Enhanced** for complex documents or PDFs
 3. **Upload** the file via drag & drop or file picker
@@ -187,8 +187,10 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ### Supported File Types
 
-- `.pdf` - PDF documents
-- `.docx` - Microsoft Word / Google Docs export
+- `.pdf` - PDF documents (always uses AI Enhanced mode)
+- `.docx` - Microsoft Word / Google Docs export (supports both modes)
+
+**Note**: When you upload a PDF, the app automatically switches to AI Enhanced mode since PDFs require AI for both tab detection and content extraction.
 
 ### How Tab Detection Works
 
