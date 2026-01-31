@@ -7,7 +7,29 @@ const turndown = new TurndownService({
   headingStyle: 'atx',
   codeBlockStyle: 'fenced',
   bulletListMarker: '-',
+  emDelimiter: '*',
+  strongDelimiter: '**',
+  linkStyle: 'inlined',
+  // Reduce unnecessary escaping
+  br: '  ',
 });
+
+// Add custom rules to prevent over-escaping
+turndown.escape = (text: string) => {
+  // Only escape characters that are truly ambiguous in Markdown
+  // Don't escape underscores in the middle of words or common patterns
+  return text
+    // Only escape asterisks at word boundaries (not in middle of text)
+    .replace(/(\s|^)\*(?=\S)/g, '$1\\*')
+    .replace(/(\S)\*(?=\s|$)/g, '$1\\*')
+    // Only escape underscores if they would create emphasis
+    .replace(/(\s|^)_(?=\S)/g, '$1\\_')
+    .replace(/(\S)_(?=\s|$)/g, '$1\\_')
+    // Escape other special chars only when necessary
+    .replace(/(\s|^)#(?=\s)/g, '$1\\#')
+    .replace(/^\s*>/gm, '\\>')
+    .replace(/^(\s*)(\d+)\./gm, '$1$2\\.');
+};
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
@@ -357,8 +379,9 @@ const processTabsDirect = (
   tabs: DetectedTab[],
   onProgress: ProgressCallback
 ): ProcessedTab[] => {
-  // Convert full HTML to Markdown
-  const fullMarkdown = turndown.turndown(htmlContent);
+  // Convert full HTML to Markdown and clean up unnecessary escapes
+  const rawMarkdown = turndown.turndown(htmlContent);
+  const fullMarkdown = cleanMarkdown(rawMarkdown);
 
   // If only one tab, return the full content
   if (tabs.length === 1) {
@@ -366,7 +389,7 @@ const processTabsDirect = (
     return [{
       fileName: tabs[0].fileName,
       originalTitle: tabs[0].originalTitle,
-      markdownContent: fullMarkdown.trim()
+      markdownContent: cleanMarkdown(fullMarkdown.trim())
     }];
   }
 
@@ -415,7 +438,7 @@ const processTabsDirect = (
     return [{
       fileName: tabs[0].fileName,
       originalTitle: tabs[0].originalTitle,
-      markdownContent: fullMarkdown.trim()
+      markdownContent: cleanMarkdown(fullMarkdown.trim())
     }];
   }
 
@@ -448,7 +471,7 @@ const processTabsDirect = (
     results.push({
       fileName: current.tab.fileName,
       originalTitle: current.tab.originalTitle,
-      markdownContent: content
+      markdownContent: cleanMarkdown(content)
     });
   }
 
@@ -460,6 +483,30 @@ const processTabsDirect = (
  */
 const escapeRegex = (str: string): string => {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
+ * Clean up markdown by removing unnecessary escapes
+ */
+const cleanMarkdown = (markdown: string): string => {
+  return markdown
+    // Remove backslash escapes from underscores in kebab-case/snake_case identifiers
+    .replace(/\\_(?=[a-z0-9])/gi, '_')
+    .replace(/(?<=[a-z0-9])\\_/gi, '_')
+    // Remove unnecessary escapes from asterisks not used for emphasis
+    .replace(/\\\*(?!\*)/g, '*')
+    // Remove escapes from dashes in kebab-case
+    .replace(/\\-/g, '-')
+    // Clean up multiple consecutive newlines (more than 2)
+    .replace(/\n{3,}/g, '\n\n')
+    // Remove escapes from parentheses
+    .replace(/\\\(/g, '(')
+    .replace(/\\\)/g, ')')
+    // Remove escapes from brackets
+    .replace(/\\\[/g, '[')
+    .replace(/\\\]/g, ']')
+    // Clean up any remaining double-backslashes
+    .replace(/\\\\/g, '\\');
 };
 
 /**
