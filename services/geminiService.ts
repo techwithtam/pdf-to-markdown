@@ -477,6 +477,7 @@ const cleanMarkdown = (markdown: string): string => {
     .replace(/\\\*/g, '*')          // Emphasis/bold (handles both \* and \*\*)
     .replace(/\\_/g, '_')           // Underscores
     .replace(/\\-/g, '-')           // Dashes
+    .replace(/\\\./g, '.')          // Periods (especially in numbered lists like 1\.)
     .replace(/\\\(/g, '(')          // Parentheses
     .replace(/\\\)/g, ')')
     .replace(/\\\[/g, '[')          // Brackets
