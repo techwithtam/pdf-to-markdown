@@ -5,10 +5,11 @@ import { ModeSelector } from './components/ModeSelector';
 import { ProcessingStatus } from './components/ProcessingStatus';
 import { ResultsView } from './components/ResultsView';
 import { VideoModal } from './components/VideoModal';
+import { HelpModal } from './components/HelpModal';
 import { AppState, ProcessedTab, ProcessingStep, ProcessingProgress, ProcessingMode } from './types';
 import { fileToBase64, convertDocxToHtml } from './utils/fileHelpers';
 import { processDocumentChunked } from './services/geminiService';
-import { AlertTriangle, Play } from 'lucide-react';
+import { AlertTriangle, Play, HelpCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProcessingProgress>({ step: ProcessingStep.READING });
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [processingMode, setProcessingMode] = useState<ProcessingMode>(ProcessingMode.QUICK);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -137,7 +139,7 @@ const App: React.FC = () => {
               </div>
 
               {/* CTA Buttons */}
-              <div className="flex justify-center gap-4">
+              <div className="flex justify-center gap-4 flex-wrap">
                 <label className="cursor-pointer px-8 py-3 bg-white text-slate-900 rounded-full text-base font-semibold hover:bg-slate-50 transition-all shadow-lg shadow-orange-200/50 hover:shadow-xl hover:shadow-orange-200/50 hover:-translate-y-0.5">
                   <input
                     type="file"
@@ -153,6 +155,13 @@ const App: React.FC = () => {
                 >
                   <Play className="w-4 h-4" />
                   Watch demo
+                </button>
+                <button
+                  onClick={() => setIsHelpOpen(true)}
+                  className="px-8 py-3 bg-white/70 text-slate-700 rounded-full text-base font-semibold hover:bg-white transition-all flex items-center gap-2 shadow-lg shadow-orange-200/30"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  How it works
                 </button>
               </div>
 
@@ -239,6 +248,9 @@ const App: React.FC = () => {
 
       {/* Video Modal */}
       <VideoModal isOpen={isVideoOpen} onClose={() => setIsVideoOpen(false)} />
+
+      {/* Help Modal */}
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </div>
   );
 };

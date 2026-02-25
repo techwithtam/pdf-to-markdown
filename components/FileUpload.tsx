@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { UploadCloud, FileType, AlertCircle, Link as LinkIcon } from 'lucide-react';
+import { FILE_CONFIG } from '../config';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -22,18 +23,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
   }, [disabled]);
 
   const validateAndProcessFile = (file: File) => {
-    const validTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-
-    if (!validTypes.includes(file.type)) {
+    if (!FILE_CONFIG.acceptedTypes.includes(file.type)) {
       setError('Please upload a PDF or DOCX file.');
       return;
     }
 
-    if (file.size > 20 * 1024 * 1024) {
-      setError('File size must be less than 20MB.');
+    if (file.size > FILE_CONFIG.maxSizeBytes) {
+      setError(`File size must be less than ${FILE_CONFIG.maxSizeBytes / 1024 / 1024}MB.`);
       return;
     }
     setError(null);
@@ -92,7 +88,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
       >
         <input
           type="file"
-          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept={FILE_CONFIG.acceptedExtensions}
           onChange={handleFileInput}
           disabled={disabled}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"

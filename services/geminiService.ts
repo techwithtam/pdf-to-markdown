@@ -1,17 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import TurndownService from 'turndown';
 import { ProcessingResult, ProcessedTab, ProcessingMode } from '../types';
+import { AI_CONFIG, TAB_DETECTION_CONFIG, TURNDOWN_CONFIG, MARKDOWN_ESCAPE_PATTERNS } from '../config';
+import { PROMPTS } from '../prompts';
 
 // Initialize Turndown for HTML to Markdown conversion
-const turndown = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-  bulletListMarker: '-',
-  emDelimiter: '*',
-  strongDelimiter: '**',
-  linkStyle: 'inlined',
-  br: '  ',
-});
+const turndown = new TurndownService(TURNDOWN_CONFIG);
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
@@ -51,16 +45,12 @@ export const detectTabsLocal = (htmlContent: string): DetectionResult => {
   // Check if text looks like a tab separator (not regular content)
   const isLikelySeparator = (text: string): boolean => {
     const trimmed = text.trim();
-    // Must be short (1-50 chars) - tab titles are concise
-    if (trimmed.length > 50 || trimmed.length < 2) return false;
-    // Should not end with period (not a sentence)
-    if (trimmed.endsWith('.')) return false;
-    // Should not contain multiple sentences
-    if (trimmed.includes('. ')) return false;
-    // Should not start with list markers
-    if (/^[-*•]\s/.test(trimmed)) return false;
-    // Should not be just a number
-    if (/^\d+$/.test(trimmed)) return false;
+    const { maxLength, minLength, allowTrailingPeriod, allowMultipleSentences, allowListMarkers, allowPureNumbers } = TAB_DETECTION_CONFIG.separator;
+    if (trimmed.length > maxLength || trimmed.length < minLength) return false;
+    if (!allowTrailingPeriod && trimmed.endsWith('.')) return false;
+    if (!allowMultipleSentences && trimmed.includes('. ')) return false;
+    if (!allowListMarkers && /^[-*•]\s/.test(trimmed)) return false;
+    if (!allowPureNumbers && /^\d+$/.test(trimmed)) return false;
     return true;
   };
 
@@ -136,27 +126,7 @@ export type ProgressCallback = (phase: 'detecting' | 'processing', current: numb
 export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> => {
   const ai = getAI();
 
-  const prompt = `
-    Analyze this document and identify ALL the separate tabs/sections that should be split into individual files.
-
-    **How to identify tab separators:**
-    - Look for SHORT standalone lines/paragraphs that act as SECTION DIVIDERS
-    - These are typically 1-5 words, sitting alone, followed by the section's content
-    - They can be ANY format: "Overview", "Chapter 1", "system-prompt", "_navigation-guide", "00-intro", "Getting Started"
-    - In HTML: often <p>Title Here</p> or <p><a id="..."></a>Title Here</p>
-    - They are NOT part of the content - they DIVIDE the document into logical sections
-    - Each divider marks where a new file should begin
-
-    **CRITICAL: Scan the ENTIRE document. Every standalone short title = 1 tab.**
-
-    Return ONLY the tab structure - do NOT extract content.
-    For each tab:
-    - tabNumber: Sequential (1, 2, 3...)
-    - fileName: Convert to kebab-case.md (e.g., "Getting Started" -> "getting-started.md")
-    - originalTitle: Exact title text found
-    - startPage: Position in document order (1, 2, 3...)
-    - endPage: Position before next tab (or end)
-  `;
+  const prompt = PROMPTS.tabDetection;
 
   let contents;
   if (input.type === 'pdf') {
@@ -173,10 +143,10 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
   }
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: AI_CONFIG.model,
     contents: contents,
     config: {
-      maxOutputTokens: 65536,
+      maxOutputTokens: AI_CONFIG.maxOutputTokensDetection,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -226,7 +196,7 @@ export const detectTabs = async (input: ProcessInput): Promise<DetectionResult> 
 export const processTab = async (
   input: ProcessInput,
   tab: DetectedTab,
-  maxRetries: number = 2
+  maxRetries: number = AI_CONFIG.maxRetries
 ): Promise<ProcessedTab> => {
   const ai = getAI();
 
@@ -234,23 +204,8 @@ export const processTab = async (
   const isSlicedHtml = input.type === 'html' && tab.htmlStartIndex !== undefined;
 
   const prompt = isSlicedHtml
-    ? `
-      Convert this HTML content to clean Markdown.
-      This section is titled "${tab.originalTitle}".
-
-      **CLEAN**: Remove any noise, artifacts, or redundant whitespace.
-      **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
-      **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
-    `
-    : `
-      Extract content ONLY from pages ${tab.startPage} to ${tab.endPage} of this document.
-      This section is titled "${tab.originalTitle}".
-
-      **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, headers/footers, and noise.
-      **OUTPUT**: Return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
-      **IMPORTANT**: Only process pages ${tab.startPage}-${tab.endPage}, ignore all other pages.
-      **DO NOT include the tab/section title "${tab.originalTitle}" at the beginning** - it's already used as the filename.
-    `;
+    ? PROMPTS.tabProcessingHtml(tab.originalTitle)
+    : PROMPTS.tabProcessingPdf(tab.originalTitle, tab.startPage, tab.endPage);
 
   let contents;
   if (input.type === 'pdf') {
@@ -271,10 +226,10 @@ export const processTab = async (
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: AI_CONFIG.model,
         contents: contents,
         config: {
-          maxOutputTokens: 32768,
+          maxOutputTokens: AI_CONFIG.maxOutputTokensProcessing,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -306,7 +261,7 @@ export const processTab = async (
 
       // Wait before retry (exponential backoff)
       if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        await new Promise(resolve => setTimeout(resolve, AI_CONFIG.retryBackoffMs(attempt)));
       }
     }
   }
@@ -322,7 +277,7 @@ const processTabsInBatches = async (
   input: ProcessInput,
   tabs: DetectedTab[],
   onProgress: ProgressCallback,
-  batchSize: number = 3
+  batchSize: number = AI_CONFIG.batchSize
 ): Promise<ProcessedTab[]> => {
   const results: ProcessedTab[] = [];
 
@@ -471,26 +426,10 @@ const escapeRegex = (str: string): string => {
  * Clean up markdown by removing unnecessary escapes
  */
 const cleanMarkdown = (markdown: string): string => {
-  return markdown
-    // Remove escapes from ALL markdown special characters
-    .replace(/\\#/g, '#')           // Headings
-    .replace(/\\\*/g, '*')          // Emphasis/bold (handles both \* and \*\*)
-    .replace(/\\_/g, '_')           // Underscores
-    .replace(/\\-/g, '-')           // Dashes
-    .replace(/\\\./g, '.')          // Periods (especially in numbered lists like 1\.)
-    .replace(/\\\(/g, '(')          // Parentheses
-    .replace(/\\\)/g, ')')
-    .replace(/\\\[/g, '[')          // Brackets
-    .replace(/\\\]/g, ']')
-    .replace(/\\>/g, '>')           // Blockquotes
-    .replace(/\\`/g, '`')           // Code
-    .replace(/\\~/g, '~')           // Strikethrough
-    .replace(/\\\|/g, '|')          // Tables
-    .replace(/\\!/g, '!')           // Images
-    // Clean up multiple consecutive newlines (more than 2)
-    .replace(/\n{3,}/g, '\n\n')
-    // Fix any double-backslashes that remain
-    .replace(/\\\\/g, '\\');
+  return MARKDOWN_ESCAPE_PATTERNS.reduce(
+    (md, [pattern, replacement]) => md.replace(pattern, replacement),
+    markdown
+  );
 };
 
 /**
@@ -575,8 +514,8 @@ export const processDocumentChunked = async (
       detection = detectTabsLocal(input.data);
       console.log(`Local detection found ${detection.tabs.length} tabs`);
 
-      // Fallback to AI only if local detection finds 0 or 1 tab (likely missed some)
-      if (detection.tabs.length <= 1) {
+      // Fallback to AI only if local detection finds fewer than the minimum threshold
+      if (detection.tabs.length < TAB_DETECTION_CONFIG.localDetectionMinTabs) {
         console.log('Local detection insufficient, falling back to AI...');
         detection = await detectTabs(input);
         // For AI-detected tabs, find HTML boundaries for slicing
@@ -602,8 +541,7 @@ export const processDocumentChunked = async (
       processedTabs = await processTabsInBatches(
         input,
         detection.tabs,
-        onProgress,
-        3 // Process 3 tabs in parallel
+        onProgress
       );
     }
 
@@ -622,14 +560,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
   try {
     let contents;
 
-    const commonInstructions = `
-      Split this multi-tab document into separate files.
-
-      **DETECT**: Sparse separator pages with titles like "00-navigation-guide" mark new tabs.
-      **CLEAN**: Remove "==Start of OCR==", "==Screenshot==", page numbers, and noise.
-      **OUTPUT**: For each tab, return clean Markdown with proper H1/H2/H3 hierarchy and valid tables.
-      **FILENAME**: Generate .md filename from separator title (e.g., "00-navigation-guide.md").
-    `;
+    const commonInstructions = PROMPTS.legacySinglePass;
 
     if (input.type === 'pdf') {
       contents = {
@@ -646,8 +577,7 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
               Here is the HTML content of a document (converted from DOCX).
               ${commonInstructions}
 
-              **HTML SPECIFIC HINT**:
-              Look for <h1> tags or paragraphs that contain distinct filenames/titles followed by content.
+              ${PROMPTS.legacySinglePassHtmlHint}
 
               HTML CONTENT START:
               ${input.data}
@@ -660,10 +590,10 @@ export const processDocument = async (input: ProcessInput): Promise<ProcessingRe
 
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: AI_CONFIG.model,
       contents: contents,
       config: {
-        maxOutputTokens: 65536,
+        maxOutputTokens: AI_CONFIG.maxOutputTokensDetection,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
